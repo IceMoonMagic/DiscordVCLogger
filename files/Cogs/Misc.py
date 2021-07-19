@@ -1,10 +1,12 @@
 """Cog of random commands that don't fit elsewhere."""
+import logging
 import random as r
 from asyncio import sleep
-import logging
+
 import discord
 import discord.ext.commands as cmd
 
+from .cog_manager import Cog
 
 logger = logging.getLogger(__name__)
 
@@ -15,22 +17,16 @@ def setup(bot: cmd.Bot):
     bot.add_cog(Misc(bot))
 
 
-class Misc(cmd.Cog):
+class Misc(Cog):
     """Random Commands that don't fit anywhere else"""
 
-    ride_set_ignore = set()  # {'VcLog'}
-    """Cogs to add member to an ignore set when ridding.
-    Must have a set at self.ignore and a listener for on_voice_state_update 
-    """
-
     def __init__(self, bot: cmd.Bot):
-        self.bot = bot
-        if hasattr(bot, 'error_color'):
-            self.error_color = bot.error_color
-        else:
-            self.error_color = discord.Color.dark_red()
-        self.ride_members = set()
-        self.shutdown = False
+        super().__init__(bot)
+        self.ride_members = {}
+        self._shutdown = False
+
+    def shutdown(self):
+        self._shutdown = True
 
     def shutdown_complete(self) -> bool:
         return len(self.ride_members) == 0
@@ -105,7 +101,7 @@ class Misc(cmd.Cog):
                                  embed=create_embed(0))
         move = 0
         for move in range(times):
-            if self.shutdown:
+            if self._shutdown:
                 break
             new_channel = channels.pop(r.randint(0, len(channels) - 1))
             channels.append(current_channel)

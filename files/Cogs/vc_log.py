@@ -7,6 +7,10 @@ import logging
 import discord
 import discord.ext.commands as cmd
 
+from .cog_manager import Cog
+
+# import tools
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +20,7 @@ def setup(bot: cmd.Bot):
     bot.add_cog(VcLog(bot))
 
 
-class VcLog(cmd.Cog):
+class VcLog(Cog):
     """Cog for monitoring who joined and left a VC"""
 
     @dc.dataclass()
@@ -27,11 +31,48 @@ class VcLog(cmd.Cog):
         _absent: list = dc.field(default_factory=list, init=False)
 
         @dc.dataclass(frozen=True)
-        class _VoiceEvent:
+        class VoiceEvent:
             """Bundles the Member and Time of a Voice Event"""
             member_id: int
             time: dt.datetime = dc.field(
                 default_factory=lambda: dt.datetime.now(dt.timezone.utc))
+
+            @classmethod
+            def unknown_time(cls, member_id: int):
+                return cls(member_id=member_id,
+                           time=dt.datetime.fromtimestamp(
+                               0, tz=dt.timezone.utc))
+
+            def __eq__(self, other):
+                if isinstance(other, self.__class__):
+                    return self.member_id == other.member_id
+                elif isinstance(other, int):
+                    return self.member_id == other
+                else:
+                    return NotImplemented
+                
+            def __hash__(self):
+                return self.member_id
+
+            def __str__(self):
+                currently = dt.datetime.now(dt.timezone.utc)  # The UTC Time to compare to
+                if self.time.timestamp() == 0:
+                    return f' - <@{self.member_id}>: Unknown'
+                else:
+                    seconds = int((currently - self.time).total_seconds())
+                    minutes = seconds // 60
+                    if seconds < 120:  # Only shows seconds if less than 2 Minutes
+                        time_difference = f'{seconds} seconds'
+                    elif minutes < 120:  # Only shows minutes if less than 2 Hours
+                        time_difference = f'{minutes} minutes'
+                    else:  # Shows Hours and Minutes otherwise
+                        time_difference = f'{minutes // 60} hours and' \
+                                          f' {minutes % 60} minutes'
+                    # Adds line in format " - [Mention Member]: [Time] ago"
+                    return f' - <@{self.member_id}>: {time_difference} ago'
+
+        def is_empty(self):
+            return len(self._present) == 0
 
         def _event(self, member_id: int, add_to: list, remove_from: list):
             """
@@ -42,11 +83,13 @@ class VcLog(cmd.Cog):
             :param remove_from: The list to remove from
             :return: None
             """
-            add_to.append(self._VoiceEvent(member_id))
-            for bundle in remove_from:
-                if bundle.member_id == member_id:
-                    remove_from.pop(remove_from.index(bundle))
-                    break
+            add_to.append(self.VoiceEvent(member_id))
+            if member_id in remove_from:
+                remove_from.pop(remove_from.index(member_id))
+            # for bundle in remove_from:
+            #     if bundle.member_id == member_id:
+            #         remove_from.pop(remove_from.index(bundle))
+            #         break
 
         def event(self, member_id: int, joined: bool):
             """
@@ -69,9 +112,7 @@ class VcLog(cmd.Cog):
             :param member_id: The ID of the Member
             :return: None
             """
-            self._present.insert(0, self._VoiceEvent(
-                member_id, time=dt.datetime.fromtimestamp(
-                    0, tz=dt.timezone.utc)))
+            self._present.insert(0, self.VoiceEvent.unknown_time(member_id))
 
         def past_left(self, member_id):
             """
@@ -84,6 +125,11 @@ class VcLog(cmd.Cog):
                 if bundle.member_id == member_id:
                     self._present.pop(self._present.index(bundle))
 
+        def get_bundle(self, member_id: int, present: bool = True) -> VoiceEvent:
+            if present:
+                return self._present[self._present.index(member_id)]
+            return self._absent[self._absent.index(member_id)]
+
         @property
         def present(self):
             """Gets the list of present members"""
@@ -95,12 +141,7 @@ class VcLog(cmd.Cog):
             return self._absent
 
     def __init__(self, bot: cmd.Bot):
-        self.bot = bot
-        if hasattr(bot, 'error_color'):
-            self.error_color = bot.error_color
-        else:
-            self.error_color = discord.Color.dark_red()
-        self.ignore = set()  # Set of users to ignore
+        super().__init__(bot)
         self._logs = {}
 
     @cmd.Cog.listener()
@@ -122,9 +163,8 @@ class VcLog(cmd.Cog):
                             self._logs[vc.id].past_joined(member_id)
                 if vc.id in self._logs:
                     for bundle in self._logs[vc.id].present:
-                        if bundle.member_id not in vc.voice_states:
+                        if bundle not in vc.voice_states:
                             self._logs[vc.id].past_left(bundle.member_id)
-
 
     @cmd.is_owner()
     @cmd.command(hidden=True)
@@ -149,7 +189,7 @@ class VcLog(cmd.Cog):
         :return: None
         """
         # Rules out voice state updates that aren't join/leave
-        if before.channel == after.channel or member.id in self.ignore:
+        if before.channel == after.channel:
             logger.debug('Voice State Update: Ignored')
             return
         logger.info(f'Voice State Update: {member.id} ({member.display_name})'
@@ -157,17 +197,17 @@ class VcLog(cmd.Cog):
         # If member was in a channel before voice state update
         if before.channel is not None:
             self._logs[before.channel.id].event(member.id, False)
-            if len(self._logs[before.channel.id].present) == 0:
-                # Deletes the _VcLogData if associated channel is empty
+            # Deletes the _VcLogData if associated channel is empty
+            if self._logs[before.channel.id].is_empty():
                 logger.info(f'{before.channel.id} ({before.channel.name}) is'
                             f' empty, deleting logs.')
                 del self._logs[before.channel.id]
 
         # If member ended in a channel after voice state update
         if after.channel is not None:
+            # Creates a _VcLogData if there is not one associated
+            # with the channel yet
             if after.channel.id not in self._logs:
-                # Creates a _VcLogData if there is not one associated
-                # with the channel yet
                 logger.info(f'{after.channel.id} ({after.channel.name}) has no'
                             f' logs, creating.')
                 self._logs[after.channel.id] = self._VcLogData()
@@ -194,36 +234,49 @@ class VcLog(cmd.Cog):
                 description='You\'re not in a Voice Channel.',
                 color=self.error_color)
 
-        logger.info(f'Creating VC Log Embed for {ctx.author.voice.channel.id}'
-                    f'({ctx.author.voice.channel.name})')
+        vc = ctx.author.voice.channel
+        logger.info(f'Creating VC Log Embed for {vc.id}({vc.name})')
         # Gets the list of Members/Times to use
-        bundles = self._logs[ctx.author.voice.channel.id]
+        bundles = self._logs[vc.id]
         bundles = bundles.present if joined else bundles.absent
         if amount <= -1:
             amount = len(bundles)
 
         # Set up variables for embed formatting
         title = f'{"Join" if joined else "Leave"} history in' \
-                f' __{ctx.author.voice.channel.name}__:'
+                f' __{vc.name}__:'
         desc = ''
-        currently = dt.datetime.now(dt.timezone.utc)  # The UTC Time to compare to
         for bundle, _ in zip(reversed(bundles), range(amount)):
-            if bundle.time.timestamp() == 0:
-                desc += f' - <@{bundle.member_id}>: Unknown\n'
-            else:
-                seconds = int((currently - bundle.time).total_seconds())
-                minutes = seconds // 60
-                if seconds < 120:  # Only shows seconds if less than 2 Minutes
-                    time_difference = f'{seconds} seconds'
-                elif minutes < 120:  # Only shows minutes if less than 2 Hours
-                    time_difference = f'{minutes} minutes'
-                else:  # Shows Hours and Minutes otherwise
-                    time_difference = f'{minutes // 60} hours and' \
-                                      f' {minutes % 60} minutes'
-                # Adds line in format " - [Mention Member]: [Time] ago"
-                desc += f' - <@{bundle.member_id}>: {time_difference} ago\n'
+            desc += f'{bundle}\n'
 
-        embed = discord.Embed(title=title,
-                              description=desc if desc else ' - None',
-                              color=ctx.guild.me.color)
-        return embed
+        return discord.Embed(title=title,
+                             description=desc if desc else ' - None',
+                             color=vc.guild.me.color)
+
+    @cmd.command()
+    async def when(self, ctx: cmd.Context):
+        """Find when someone joined the VC they are in."""
+        descs = {}
+        for member in ctx.message.mentions:
+            try:
+                vc = member.voice.channel
+                if vc.name not in descs:
+                    descs[vc.name] = ''
+                descs[vc.name] += f'\t{self._logs[vc.id].get_bundle(member.id)}\n'
+            except AttributeError:
+                for vc in ctx.guild.voice_channels:
+                    if vc.id in self._logs and member.id in self._logs[vc.id].absent:
+                        if vc.name not in descs:
+                            descs[vc.name] = ''
+                        descs[vc.name] += f'\t{self._logs[vc.id].get_bundle(member.id, False)}'
+                if None not in descs:
+                    descs[None] = ''
+                descs[None] += f'\t{self._VcLogData.VoiceEvent.unknown_time(member.id)}\n'
+
+        desc = ''
+        for name in descs:
+            desc += f'**{name}**\n{descs[name]} '
+
+        await ctx.send(embed=discord.Embed(
+            title=f'[ToDo]',  # ToDo: Embed Title
+            description=desc, color=ctx.guild.me.color))

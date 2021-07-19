@@ -1,8 +1,9 @@
 """Manages Saving and Loading for the Bot"""
 
-import json
+import yaml
 import logging
 from typing import Dict
+import discord.ext.commands as cmd
 
 logger = logging.getLogger(__name__)
 
@@ -43,4 +44,4 @@ def bot_key_load() -> str:
     """Gets the bot key from BOT_KEY"""
     logger.info('Loading bot key')
     with open(_BOT_KEY_FILE) as file:
-        return json.load(file)
+        return yaml.safe_load(file)
