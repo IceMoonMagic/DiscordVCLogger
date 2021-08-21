@@ -10,6 +10,10 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+def file_path(filename: str) -> str:
+    return f'saves/{filename}.yaml'
+
+
 def save_guild_settings(bot: cmd.Bot):
     # out = {guild_id: {'prefix': prefixes[guild_id]} for guild_id in prefixes}
     out = {}
@@ -33,7 +37,7 @@ def load_guild_settings(bot: cmd.Bot):
             cog.load_settings(data[cog_name])
 
 
-def add_cogs(bot: cmd.Bot, cogs: List[Union[str, cmd.cog.CogMeta]]):
+def load_extensions(bot: cmd.Bot, cogs: List[Union[str, cmd.cog.CogMeta]]):
     for cog in cogs:
         if isinstance(cog, str):
             bot.load_extension(f'Cogs.{cog}')
@@ -67,6 +71,8 @@ def shutdown_complete(bot: cmd.Bot) -> bool:
         if isinstance(cog, Cog):
             if not cog.shutdown_complete():
                 return False
+            else:
+                bot.remove_cog(cog_name)
     return True
 
 
@@ -88,6 +94,10 @@ class Cog(cmd.Cog):
         for command in self.get_commands():
             if not command.hidden:
                 self._disabled_commands[command.name] = set()
+        try:
+            self.load_file()
+        except FileNotFoundError:
+            pass
 
     def shutdown(self) -> None:
         pass
@@ -108,6 +118,24 @@ class Cog(cmd.Cog):
                 self.__getattribute__(attr).update(settings[attr])
             else:
                 setattr(self, attr, settings[attr])
+
+    def save_file(self, filename: str = None):
+        if filename is None:
+            filename = self.qualified_name
+        with open(file_path(filename), 'w') as file:
+            file.seek(0)
+            file.truncate()
+            yaml.safe_dump(self.save_settings(), file)
+
+    def load_file(self, filename: str = None):
+        if filename is None:
+            filename = self.qualified_name
+        with open(file_path(filename), 'r') as file:
+            self.load_settings(yaml.safe_load(file))
+
+    def cog_unload(self):
+        self.save_file()
+        super().cog_unload()
 
     def cog_check(self, ctx):
         if ctx.command.qualified_name not in self._disabled_commands or \

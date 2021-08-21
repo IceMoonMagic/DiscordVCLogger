@@ -20,6 +20,12 @@ def setup(bot: cmd.Bot):
     bot.add_cog(VcLog(bot))
 
 
+def teardown(bot: cmd.Bot):
+    """Removes the cog from the bot"""
+    logger.info('Unloading Cog: VC Log')
+    bot.remove_cog(f'{VcLog.qualified_name}')
+
+
 class VcLog(Cog):
     """Cog for monitoring who joined and left a VC"""
 

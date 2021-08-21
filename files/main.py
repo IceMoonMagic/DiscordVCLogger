@@ -21,6 +21,18 @@ DEFAULT_GUILD_PREFIX = '|'
 """The prefix that will be assigned if no prefix exists"""
 
 
+def setup(bot: cmd.Bot):
+    """Adds the cog to the bot"""
+    logger.info('Loading Cog: System')
+    bot.add_cog(System(bot))
+
+
+def teardown(bot: cmd.Bot):
+    """Removes the cog from the bot"""
+    logger.info('Unloading Cog: System')
+    bot.remove_cog(f'{System.qualified_name}')
+
+
 def get_guild_prefix(bot: cmd.Bot, message: discord.Message) -> Tuple[str, str]:
     """
     Gets the prefix of a guild
@@ -130,11 +142,63 @@ class System(cog_manager.Cog):
         logger.info('Shutting down.')
         cog_manager.call_shutdown(self.bot)
         await ctx.send(embed=discord.Embed(title='Shutting Down'))
-        cog_manager.save_guild_settings(self.bot)
+        # cog_manager.save_guild_settings(self.bot)
         # saving.guild_prefixes_save(_guild_prefixes)
         while not cog_manager.shutdown_complete(self.bot):
             await sleep(.5)
         await self.bot.close()
+
+    # @cmd.command(hidden=True)
+    # @cmd.is_owner()
+    # async def unload_cog(self, ctx: cmd.Context, cog_name: str):
+    #     if cog_name not in self.bot.cogs:
+    #         await self._send_error(ctx, 'Unknown Cog Name',
+    #                                f'Bot does not have a Cog called {cog_name}')
+    #         return
+    #     if not cog_name == self.qualified_name:
+    #         self.bot.remove_cog(cog_name)
+    #     else:
+    #         await self._send_error(ctx, 'Cannot Unload This Cog',
+    #                                'This Cog can\'t be unloaded, '
+    #                                'as that would probably not end well.')
+    #
+    # async def load_cog(self, ctx: cmd.Context, cog_name: str):
+    #     if cog_name in self.bot.cogs:
+    #         await self._send_error(ctx, 'Cog Already Loaded',
+    #                                f'Cog {cog_name} has already been loaded.')
+
+    @cmd.command(hidden=True)
+    @cmd.is_owner()
+    async def unload_extension(self, ctx: cmd.Context, name: str):
+        if name == __file__[:__file__.find('.py')]:
+            await self._send_error(ctx, f'Cannot Unload {name}',
+                                   f'It is probably a bad idea to do this.'
+                                   f'Try the `reload_extension` command instead')
+        try:
+            self.bot.unload_extension(name)
+        except cmd.ExtensionError as e:
+            # ToDo: Unload_Extension Error Description
+            await self._send_error(ctx, title=e.name, desc=e.args[0])
+
+    @cmd.command(hidden=True)
+    @cmd.is_owner()
+    async def load_extension(self, ctx: cmd.Context, name: str):
+        try:
+            self.bot.load_extension(name)
+        except cmd.ExtensionError as e:
+            # ToDo: Unload_Extension Error Description
+            await self._send_error(ctx, title=e.name, desc=e.args[0])
+
+    @cmd.command(hidden=True)
+    @cmd.is_owner()
+    async def reload_extension(self, ctx: cmd.Context, name: str):
+        # if name not in self.bot.extensions and name in self.bot.cogs:
+        #     name = self.bot.get_cog(name).
+        try:
+            self.bot.reload_extension(name)
+        except cmd.ExtensionError as e:
+            # ToDo: Unload_Extension Error Description
+            await self._send_error(ctx, title=e.name, desc=e.args[0])
 
     @cmd.command(hidden=True, name='exec')
     @cmd.is_owner()
@@ -173,7 +237,8 @@ if __name__ == '__main__':
     # Callable function needs signature of (cmd.Bot, discord.Message)
     _bot = cmd.Bot(command_prefix=get_guild_prefix,
                    owner_id=612101930985979925)
-    cog_manager.add_cogs(_bot, [System, 'vc_log', 'Misc', 'dumb'])
+    _bot.load_extension('main')
+    cog_manager.load_extensions(_bot, [System, 'vc_log', 'Misc', 'dumb'])
     # _bot.help_command = cog_manager.HelpCommand()
     cog_manager.load_guild_settings(_bot)
     pass

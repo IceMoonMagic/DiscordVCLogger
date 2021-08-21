@@ -1,5 +1,6 @@
 import logging
 import re  # https://docs.python.org/3/library/re.html
+import random
 
 import discord
 import discord.ext.commands as cmd
@@ -13,6 +14,12 @@ def setup(bot: cmd.Bot):
     """Adds the cog to the bot"""
     logger.info('Loading Cog: Dumb')
     bot.add_cog(Dumb(bot))
+
+
+def teardown(bot: cmd.Bot):
+    """Removes the cog from the bot"""
+    logger.info('Unloading Cog: Dumb')
+    bot.remove_cog(f'{Dumb.qualified_name}')
 
 
 class Dumb(Cog):
@@ -92,3 +99,9 @@ class Dumb(Cog):
         if before.mute and not after.mute:
             if member.id in self.muted:
                 self.muted.remove(member.id)
+
+    @cmd.command(name='RNG')
+    async def random_number(self, ctx: cmd.Context, lo: int, hi: int):
+        """Generate a Random Number between two numbers inclusively."""
+        await self._send_embed(ctx, f'{random.randint(lo, hi)}',
+                               f'Random Number Between {lo} and {hi}')
