@@ -1,2 +1,2 @@
-/logs/
-/files/saves/
+/logs/*
+/saves/*
