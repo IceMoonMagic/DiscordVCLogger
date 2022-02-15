@@ -6,8 +6,8 @@ from typing import Tuple
 
 import discord
 import discord.ext.commands as cmd
+import yaml
 
-import saving
 from Cogs import cog_manager
 
 logger = logging.getLogger(__name__)
@@ -77,8 +77,8 @@ class System(cog_manager.Cog):
     """Commands for bot settings and maintenance."""
 
     def __init__(self, bot: cmd.Bot):
-        super().__init__(bot)
         self.prefixes = {}
+        super().__init__(bot)
         self._save_attrs.add('prefixes')
 
     @cmd.command()
@@ -238,8 +238,10 @@ if __name__ == '__main__':
     _bot = cmd.Bot(command_prefix=get_guild_prefix,
                    owner_id=612101930985979925)
     _bot.load_extension('main')
-    cog_manager.load_extensions(_bot, [System, 'vc_log', 'Misc', 'dumb'])
+    cog_manager.load_extensions(_bot, ['vc_log', 'misc', 'dumb'])
     # _bot.help_command = cog_manager.HelpCommand()
     cog_manager.load_guild_settings(_bot)
     pass
-    _bot.run(saving.bot_key_load())
+    with open(r'saves/bot_key.json') as file:
+        key = yaml.safe_load(file)
+    _bot.run(key)

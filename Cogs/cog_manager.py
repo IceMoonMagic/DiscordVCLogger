@@ -66,7 +66,7 @@ def call_shutdown(bot: cmd.Bot) -> dict:
 def shutdown_complete(bot: cmd.Bot) -> bool:
     """Determines if all Cogs are done shutting down."""
     # complete = True
-    for cog_name in bot.cogs:
+    for cog_name in bot.cogs.copy():
         cog = bot.get_cog(cog_name)
         if isinstance(cog, Cog):
             if not cog.shutdown_complete():
