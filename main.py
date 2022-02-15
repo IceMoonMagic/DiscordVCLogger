@@ -1,8 +1,10 @@
 """Start up of the bot, run this file."""
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 from asyncio import sleep
 from typing import Tuple
+import datetime as dt
 
 import discord
 import discord.ext.commands as cmd
@@ -13,7 +15,7 @@ from Cogs import cog_manager
 logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format='{asctime}|{levelname}|{name}\n\t{message}\n',
-                    datefmt='%m/%d/%Y %H:%M:%S', style='{')
+                    datefmt='%Y-%m-%d %H:%M:%S', style='{')
 
 _guild_prefixes = {}
 """The prefixes for the guilds as a dict of [Guild ID, prefix]"""
@@ -33,7 +35,8 @@ def teardown(bot: cmd.Bot):
     bot.remove_cog(f'{System.qualified_name}')
 
 
-def get_guild_prefix(bot: cmd.Bot, message: discord.Message) -> Tuple[str, str]:
+def get_guild_prefix(bot: cmd.Bot, message: discord.Message) -> Tuple[
+    str, str]:
     """
     Gets the prefix of a guild
 
@@ -120,7 +123,8 @@ class System(cog_manager.Cog):
                     await self._send_embed(ctx, 'Enabled Command',
                                            f'{command} is now re-enabled.')
             else:
-                await self._send_error(ctx, desc=f'Cannot disable command {command}.')
+                await self._send_error(ctx,
+                                       desc=f'Cannot disable command {command}.')
         else:
             await self._send_error(ctx, desc=f'Unknown Command `{command}`.')
 
@@ -205,8 +209,9 @@ class System(cog_manager.Cog):
     async def execute(self, ctx: cmd.Context, *, request: str = ''):
         """Allows me to better fix the bot without restarting it."""
         try:
-            command = request[request.index('```python\n') + len('```python\n'):
-                              request.rindex('```')]
+            command = request[
+                      request.index('```python\n') + len('```python\n'):
+                      request.rindex('```')]
         except ValueError:
             await self._send_error(ctx, "Evaluation Error",
                                    "Could not find code block")
@@ -234,14 +239,25 @@ class System(cog_manager.Cog):
 
 
 if __name__ == '__main__':
-    # Callable function needs signature of (cmd.Bot, discord.Message)
-    _bot = cmd.Bot(command_prefix=get_guild_prefix,
-                   owner_id=612101930985979925)
-    _bot.load_extension('main')
-    cog_manager.load_extensions(_bot, ['vc_log', 'misc', 'dumb'])
-    # _bot.help_command = cog_manager.HelpCommand()
-    cog_manager.load_guild_settings(_bot)
-    pass
-    with open(r'saves/bot_key.json') as file:
-        key = yaml.safe_load(file)
-    _bot.run(key)
+    def main():
+        now = dt.datetime.utcnow().astimezone(dt.timezone.utc)
+        handler = RotatingFileHandler(
+            f'logs/{now.strftime("%Y-%m-%d--%H-%M-%S")}.log', maxBytes=524288,
+            backupCount=3)
+
+        logging.getLogger().addHandler(handler)
+
+        # Callable function needs signature of (cmd.Bot, discord.Message)
+        _bot = cmd.Bot(command_prefix=get_guild_prefix,
+                       owner_id=612101930985979925)
+        _bot.load_extension('main')
+        cog_manager.load_extensions(_bot, ['vc_log', 'misc', 'dumb'])
+        # _bot.help_command = cog_manager.HelpCommand()
+        cog_manager.load_guild_settings(_bot)
+        pass
+        with open(r'saves/bot_key.json') as file:
+            key = yaml.safe_load(file)
+        _bot.run(key)
+
+
+    main()
