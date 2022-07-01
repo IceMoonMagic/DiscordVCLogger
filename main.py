@@ -251,7 +251,7 @@ if __name__ == '__main__':
         _bot = cmd.Bot(command_prefix=get_guild_prefix,
                        owner_id=612101930985979925)
         _bot.load_extension('main')
-        cog_manager.load_extensions(_bot, ['vc_log', 'misc', 'dumb'])
+        cog_manager.load_extensions(_bot, ['vc_log'])
         # _bot.help_command = cog_manager.HelpCommand()
         cog_manager.load_guild_settings(_bot)
         pass
