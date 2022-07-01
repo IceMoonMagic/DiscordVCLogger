@@ -22,7 +22,7 @@ class Misc(Cog):
 
     def __init__(self, bot: cmd.Bot):
         super().__init__(bot)
-        self.ride_members = {}
+        self.ride_members = set()
         self._shutdown = False
 
     def shutdown(self):
@@ -73,8 +73,8 @@ class Misc(Cog):
                     f' in {start_channel.category.id}'
                     f' ({start_channel.category.name})')
         # Let other cogs know to ignore this member's movements
-        for i in self.ride_set_ignore:
-            self.bot.get_cog(i).ignore.add(ctx.author.id)
+        # for i in self.ride_set_ignore:
+        #     self.bot.get_cog(i).ignore.add(ctx.author.id)
         self.ride_members.add(ctx.author.id)
 
         def create_embed(moved: int, finished: bool = False) -> discord.Embed:
@@ -119,12 +119,13 @@ class Misc(Cog):
             await ctx.author.edit(voice_channel=start_channel)
         except discord.HTTPException:
             # Makes Cogs told to ignore recognise the member's disconnect
-            for i in self.ride_set_ignore:
-                after_state = before_state
-                after_state.channel = None
-                await self.bot.get_cog(i).on_voice_state_update(
-                    ctx.author, before_state, after_state)
+            # for i in self.ride_set_ignore:
+            #     after_state = before_state
+            #     after_state.channel = None
+            #     await self.bot.get_cog(i).on_voice_state_update(
+            #         ctx.author, before_state, after_state)
+            pass
         await message.edit(embed=create_embed(move+1, True))
         self.ride_members.remove(ctx.author.id)
-        for i in self.ride_set_ignore:
-            self.bot.get_cog(i).ignore.remove(ctx.author.id)
+        # for i in self.ride_set_ignore:
+        #     self.bot.get_cog(i).ignore.remove(ctx.author.id)
