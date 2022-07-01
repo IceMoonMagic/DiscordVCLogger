@@ -56,7 +56,7 @@ class VcLog(Cog):
                     return self.member_id == other
                 else:
                     return NotImplemented
-                
+
             def __hash__(self):
                 return self.member_id
 
@@ -176,7 +176,7 @@ class VcLog(Cog):
     @cmd.command(hidden=True)
     async def force_scan_vcs(self, ctx: cmd.Context):
         from main import invert_color
-        message = await ctx.send(embed=discord.Embed(
+        message = await ctx.reply(embed=discord.Embed(
             title='Scanning VCs', color=invert_color(ctx.me.color)))
         await self.on_ready()
         await message.edit(embed=discord.Embed(
@@ -222,12 +222,12 @@ class VcLog(Cog):
     @cmd.command()
     async def joined(self, ctx: cmd.Context, amount: int = -1):
         """Shows who has joined your VC and how long ago."""
-        await ctx.send(embed=self._vc_log_embed(ctx, True, amount))
+        await ctx.reply(embed=self._vc_log_embed(ctx, True, amount))
 
     @cmd.command()
     async def left(self, ctx: cmd.Context, amount: int = -1):
         """Shows who has left your VC and how long ago."""
-        await ctx.send(embed=self._vc_log_embed(ctx, False, amount))
+        await ctx.reply(embed=self._vc_log_embed(ctx, False, amount))
 
     def _vc_log_embed(self, ctx: cmd.Context, joined: bool, amount: int = -1) \
             -> discord.Embed:
@@ -283,6 +283,8 @@ class VcLog(Cog):
         for name in descs:
             desc += f'**{name}**\n{descs[name]} '
 
-        await ctx.send(embed=discord.Embed(
+        await ctx.reply(embed=discord.Embed(
             title=f'[ToDo]',  # ToDo: Embed Title
             description=desc, color=ctx.guild.me.color))
+
+    # async def when_slash(self, ctx: cmd.Context, ):

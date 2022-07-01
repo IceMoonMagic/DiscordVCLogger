@@ -96,7 +96,7 @@ class System(cog_manager.Cog):
         logger.info('')
         # change_guild_prefix(ctx.guild.id, new_prefix)
         self.prefixes[ctx.guild.id] = new_prefix
-        await ctx.send(embed=discord.Embed(
+        await ctx.reply(embed=discord.Embed(
             title='Command Prefix Changed',
             description=f'Prefix now set to: `{new_prefix}`',
             color=invert_color(ctx.me.color)))
