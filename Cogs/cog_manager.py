@@ -1,9 +1,13 @@
 """Functions to help managing Cogs."""
+# from __future__ import annotations
+
 import logging
 import re
+from datetime import datetime
 from typing import Union, List
 
 import discord
+from discord import ApplicationContext
 import discord.ext.commands as cmd
 import yaml
 
@@ -37,7 +41,7 @@ def load_guild_settings(bot: cmd.Bot):
             cog.load_settings(data[cog_name])
 
 
-def load_extensions(bot: cmd.Bot, cogs: List[Union[str, cmd.cog.CogMeta]]):
+def load_extensions(bot: cmd.Bot, cogs: List[Union[str, cmd.Cog]]):
     for cog in cogs:
         if isinstance(cog, str):
             bot.load_extension(f'Cogs.{cog}')
@@ -66,8 +70,7 @@ def call_shutdown(bot: cmd.Bot) -> dict:
 def shutdown_complete(bot: cmd.Bot) -> bool:
     """Determines if all Cogs are done shutting down."""
     # complete = True
-    for cog_name in bot.cogs.copy():
-        cog = bot.get_cog(cog_name)
+    for cog_name, cog in list(bot.cogs.items()):
         if isinstance(cog, Cog):
             if not cog.shutdown_complete():
                 return False
@@ -92,7 +95,8 @@ class Cog(cmd.Cog):
         self._save_attrs = {'_disabled_commands'}
         self._disabled_commands = {}  # {com.name: {} for com in self.get_commands()}
         for command in self.get_commands():
-            if not command.hidden:
+            if not hasattr(command, 'hidden') or not command.hidden:
+                # if not command.hidden:
                 self._disabled_commands[command.name] = set()
         try:
             self.load_file()
@@ -113,7 +117,8 @@ class Cog(cmd.Cog):
     def load_settings(self, settings: dict, guild_id: int = None) -> None:
         for attr in settings:
             if not hasattr(self, attr):
-                raise AttributeError(f'Unknown Attribute: {attr} for {type(self)}')
+                raise AttributeError(
+                    f'Unknown Attribute: {attr} for {type(self)}')
             if isinstance(self.__getattribute__(attr), dict):
                 self.__getattribute__(attr).update(settings[attr])
             else:
@@ -146,15 +151,17 @@ class Cog(cmd.Cog):
             return True
         raise cmd.DisabledCommand()
 
-    async def cog_command_error(self, ctx: cmd.Context,
-                                error: cmd.CommandError):
+    # @cmd.Cog.listener()
+    async def cog_command_error(self,
+            ctx: ApplicationContext, error: discord.ApplicationCommandError):
         """Catches when a command throws an error."""
         if isinstance(error, cmd.CommandNotFound):
             return
         elif isinstance(error, cmd.DisabledCommand):
-            await self._send_error(ctx, 'Command is Disabled',
-                                   f'Command `{ctx.command.qualified_name}` is '
-                                   f'disabled and therefore cannot be used.')
+            await ctx.respond(self._make_error(
+                ctx, 'Command is Disabled',
+                f'Command `{ctx.command.qualified_name}` is '
+                f'disabled and therefore cannot be used.'))
             return
         raise_it = False
         logger.info(f'Command Error: {ctx.command.qualified_name}'
@@ -185,7 +192,7 @@ class Cog(cmd.Cog):
             if isinstance(error, cmd.BotMissingPermissions):
                 title = f'Bot {title}'
             first = True
-            for permission in error.missing_perms:
+            for permission in error.missing_permissions:
                 if not first:
                     desc += '\n'
                 first = False
@@ -201,37 +208,35 @@ class Cog(cmd.Cog):
                    f'<@{self.bot.owner_id}>'
             raise_it = True
 
-        await self._send_error(ctx, title, desc)
+        await ctx.respond(self._make_error(ctx, title, desc))
 
         if raise_it:
             raise error
 
-    async def _send_error(self, ctx: cmd.Context,
-                          title: str = 'Error', desc: str = 'Generic Error'):
+    @staticmethod
+    def _make_error(
+            ctx: ApplicationContext, title: str = 'Error',
+            desc: str = 'Generic Error'):
         """Creates a uniform error embed for other methods to send."""
-        await ctx.send(embed=self.__add_error_footer(ctx, discord.Embed(
-            title=title, description=desc, color=self.error_color)))
+        embed = discord.Embed(title=title, description=desc,
+                              color=discord.Color.dark_red())
+        embed = embed.add_field(
+            name='Command', value=ctx.command.qualified_name).add_field(
+            name='Member', value=ctx.author.mention)
+        # ).set_footer(
+        #     text=f'Try {ctx.prefix}help or {ctx.prefix}help [command] '
+        #          'for more information.')
+        return embed
 
     @staticmethod
-    async def _send_embed(ctx: cmd.Context, title: str, desc: str,
-                          color: discord.Color = None):
+    def _make_embed(
+            ctx: ApplicationContext, title: str, desc: str,
+            color: discord.Color = None):
         """Creates a uniform standard embed for other methods to send."""
         if color is None:
             color = ctx.me.color
-        await ctx.send(embed=discord.Embed(
+        return ctx.send(embed=discord.Embed(
             title=title, description=desc, color=color))
-
-    @staticmethod
-    def __add_error_footer(ctx: cmd.Context,
-                           embed: discord.Embed) -> discord.Embed:
-        """Adds adds some informative information to error reports."""
-        return embed.add_field(
-            name='Command', value=ctx.command.qualified_name).add_field(
-            name='Member', value=ctx.author.mention).add_field(
-            name='Message', value=f'[Jump]({ctx.message.jump_url})'
-        ).set_footer(
-            text=f'Try {ctx.prefix}help or {ctx.prefix}help [command] '
-                 'for more information.')
 
     @staticmethod
     def _regex_args(string: str, expected: set, error_unknown: bool = True) -> dict:
@@ -240,13 +245,22 @@ class Cog(cmd.Cog):
         for t in range(len(tokens)):
             if tokens[t] is not None and tokens[t] not in expected:
                 if error_unknown:
-                    raise cmd.ArgumentParsingError(f'Unexpected Argument {tokens[t]}')
+                    raise cmd.ArgumentParsingError(
+                        f'Unexpected Argument {tokens[t]}')
                 args[None]['unexpected'][t] = tokens[t]
             if t != len(tokens) - 1:
                 args[tokens[t]] = tokens[t + 1]
                 tokens[t] = tokens[t + 1] = None
         return args
 
+
+def get_time_str(time: Union[datetime, int],
+                 time_format: str = '') -> str:
+    if time_format not in {'', 't', 'T', 'd', 'D', 'f', 'F', 'R'}:
+        raise ValueError(f'Unrecognized time format {time_format}')
+    if isinstance(time, datetime):
+        time = int(time.timestamp())
+    return f'<t:{time}:{time_format}>'
 
 # class HelpCommand(cmd.DefaultHelpCommand):
 #

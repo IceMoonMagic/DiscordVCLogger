@@ -1,10 +1,10 @@
 """Start up of the bot, run this file."""
+import datetime as dt
 import logging
-from logging.handlers import RotatingFileHandler
 import sys
 from asyncio import sleep
+from logging.handlers import RotatingFileHandler
 from typing import Tuple
-import datetime as dt
 
 import discord
 import discord.ext.commands as cmd
@@ -35,8 +35,8 @@ def teardown(bot: cmd.Bot):
     bot.remove_cog(f'{System.qualified_name}')
 
 
-def get_guild_prefix(bot: cmd.Bot, message: discord.Message) -> Tuple[
-    str, str]:
+def get_guild_prefix(bot: cmd.Bot, message: discord.Message) \
+        -> Tuple[str, str]:
     """
     Gets the prefix of a guild
 
@@ -53,12 +53,13 @@ def get_guild_prefix(bot: cmd.Bot, message: discord.Message) -> Tuple[
     #                 f'not recognised, adding.')
     #     _guild_prefixes[message.guild.id] = DEFAULT_GUILD_PREFIX
     #     return _guild_prefixes[message.guild.id], bot.user.mention
-    prefixes = bot.get_cog(System.__name__).prefixes
-    if message.guild.id not in prefixes:
-        logger.info(f'Guild {message.guild} ({message.guild.id}) '
-                    f'not recognised, adding as {DEFAULT_GUILD_PREFIX}.')
-        prefixes[message.guild.id] = DEFAULT_GUILD_PREFIX
-    return prefixes[message.guild.id], bot.user.mention
+    # prefixes = bot.get_cog(System.__name__).prefixes
+    # if message.guild.id not in prefixes:
+    #     logger.info(f'Guild {message.guild} ({message.guild.id}) '
+    #                 f'not recognised, adding as {DEFAULT_GUILD_PREFIX}.')
+    #     prefixes[message.guild.id] = DEFAULT_GUILD_PREFIX
+    # return prefixes[message.guild.id], bot.user.mention
+    return bot.user.mention, f'{bot.user.mention} '
 
 
 def invert_color(color: discord.Color) -> discord.Color:
@@ -84,49 +85,51 @@ class System(cog_manager.Cog):
         super().__init__(bot)
         self._save_attrs.add('prefixes')
 
-    @cmd.command()
-    @cmd.guild_only()
-    @cmd.has_permissions(manage_nicknames=True)
-    async def change_prefix(self, ctx: cmd.Context, new_prefix: str):
-        """Change the guild's prefix for the bot.
+    settings = discord.SlashCommandGroup('settings', 'Settings for the bot.')
 
-        :param ctx: The parameter given by Discord.
-        :param new_prefix: The new prefix.
-        """
-        logger.info('')
-        # change_guild_prefix(ctx.guild.id, new_prefix)
-        self.prefixes[ctx.guild.id] = new_prefix
-        await ctx.reply(embed=discord.Embed(
-            title='Command Prefix Changed',
-            description=f'Prefix now set to: `{new_prefix}`',
-            color=invert_color(ctx.me.color)))
-
-    @cmd.command()
-    @cmd.has_guild_permissions(manage_guild=True)
-    async def disable(self, ctx: cmd.Context, command: str):
-        """Disable (and re-enable) the specified command
-
-        :param ctx: The parameter given by Discord
-        :param command: The command name to disable or re-enable
-        """
-        if any([command == c.name for c in self.bot.commands]):
-            com = self.bot.get_command(command)
-            if isinstance(com.cog, cog_manager.Cog) and \
-                    command in com.cog._disabled_commands:
-                disabled = com.cog._disabled_commands
-                if ctx.guild.id not in disabled[command]:
-                    disabled[command].add(ctx.guild.id)
-                    await self._send_embed(ctx, 'Disabled Command',
-                                           f'{command} is now disabled.')
-                else:
-                    disabled[command].remove(ctx.guild.id)
-                    await self._send_embed(ctx, 'Enabled Command',
-                                           f'{command} is now re-enabled.')
-            else:
-                await self._send_error(ctx,
-                                       desc=f'Cannot disable command {command}.')
-        else:
-            await self._send_error(ctx, desc=f'Unknown Command `{command}`.')
+    # @cmd.command()
+    # @cmd.guild_only()
+    # @cmd.has_permissions(manage_nicknames=True)
+    # async def change_prefix(self, ctx: cmd.Context, new_prefix: str):
+    #     """Change the guild's prefix for the bot.
+    #
+    #     :param ctx: The parameter given by Discord.
+    #     :param new_prefix: The new prefix.
+    #     """
+    #     logger.info('')
+    #     # change_guild_prefix(ctx.guild.id, new_prefix)
+    #     self.prefixes[ctx.guild.id] = new_prefix
+    #     await ctx.reply(embed=discord.Embed(
+    #         title='Command Prefix Changed',
+    #         description=f'Prefix now set to: `{new_prefix}`',
+    #         color=invert_color(ctx.me.color)))
+    #
+    # @cmd.command()
+    # @cmd.has_guild_permissions(manage_guild=True)
+    # async def disable(self, ctx: cmd.Context, command: str):
+    #     """Disable (and re-enable) the specified command
+    #
+    #     :param ctx: The parameter given by Discord
+    #     :param command: The command name to disable or re-enable
+    #     """
+    #     if any([command == c.name for c in self.bot.commands]):
+    #         com = self.bot.get_command(command)
+    #         if isinstance(com.cog, cog_manager.Cog) and \
+    #                 command in com.cog._disabled_commands:
+    #             disabled = com.cog._disabled_commands
+    #             if ctx.guild.id not in disabled[command]:
+    #                 disabled[command].add(ctx.guild.id)
+    #                 await self._send_embed(ctx, 'Disabled Command',
+    #                                        f'{command} is now disabled.')
+    #             else:
+    #                 disabled[command].remove(ctx.guild.id)
+    #                 await self._send_embed(ctx, 'Enabled Command',
+    #                                        f'{command} is now re-enabled.')
+    #         else:
+    #             await self._send_error(ctx,
+    #                                    desc=f'Cannot disable command {command}.')
+    #     else:
+    #         await self._send_error(ctx, desc=f'Unknown Command `{command}`.')
 
     @cmd.Cog.listener()
     async def on_ready(self):
@@ -139,9 +142,13 @@ class System(cog_manager.Cog):
         logger.info(f'Command [{ctx.command.qualified_name}] invoked by'
                     f' {ctx.author.id} ({ctx.author.display_name})')
 
-    @cmd.command(hidden=True, name='shutdown')
-    @cmd.is_owner()
-    async def shutdown_command(self, ctx: cmd.Context):
+    admin_ctrl = settings.create_subgroup('bot', 'Bot maintenance settings',
+                                          checks=[cmd.is_owner])
+
+    # @cmd.command(hidden=True, name='shutdown')
+    # @cmd.is_owner()
+    @admin_ctrl.command(name='shutdown')
+    async def shutdown_command(self, ctx: discord.ApplicationContext):
         """Does actions necessary to end execution of the bot."""
         logger.info('Shutting down.')
         cog_manager.call_shutdown(self.bot)
@@ -171,8 +178,9 @@ class System(cog_manager.Cog):
     #         await self._send_error(ctx, 'Cog Already Loaded',
     #                                f'Cog {cog_name} has already been loaded.')
 
-    @cmd.command(hidden=True)
-    @cmd.is_owner()
+    # @cmd.command(hidden=True)
+    # @cmd.is_owner()
+    @admin_ctrl.command()
     async def unload_extension(self, ctx: cmd.Context, name: str):
         if name == __file__[:__file__.find('.py')]:
             await self._send_error(ctx, f'Cannot Unload {name}',
@@ -184,8 +192,9 @@ class System(cog_manager.Cog):
             # ToDo: Unload_Extension Error Description
             await self._send_error(ctx, title=e.name, desc=e.args[0])
 
-    @cmd.command(hidden=True)
-    @cmd.is_owner()
+    # @cmd.command(hidden=True)
+    # @cmd.is_owner()
+    @admin_ctrl.command()
     async def load_extension(self, ctx: cmd.Context, name: str):
         try:
             self.bot.load_extension(name)
@@ -193,8 +202,9 @@ class System(cog_manager.Cog):
             # ToDo: Unload_Extension Error Description
             await self._send_error(ctx, title=e.name, desc=e.args[0])
 
-    @cmd.command(hidden=True)
-    @cmd.is_owner()
+    # @cmd.command(hidden=True)
+    # @cmd.is_owner()
+    @admin_ctrl.command()
     async def reload_extension(self, ctx: cmd.Context, name: str):
         # if name not in self.bot.extensions and name in self.bot.cogs:
         #     name = self.bot.get_cog(name).
@@ -204,8 +214,9 @@ class System(cog_manager.Cog):
             # ToDo: Unload_Extension Error Description
             await self._send_error(ctx, title=e.name, desc=e.args[0])
 
-    @cmd.command(hidden=True, name='exec')
-    @cmd.is_owner()
+    # @cmd.command(hidden=True, name='exec')
+    # @cmd.is_owner()
+    @admin_ctrl.command()
     async def execute(self, ctx: cmd.Context, *, request: str = ''):
         """Allows me to better fix the bot without restarting it."""
         try:
@@ -224,8 +235,9 @@ class System(cog_manager.Cog):
         await ctx.send(embed=discord.Embed(title='Evaluation').add_field(
             name='Command', value=command))
 
-    @cmd.command(hidden=True, name='eval')
-    @cmd.is_owner()
+    # @cmd.command(hidden=True, name='eval')
+    # @cmd.is_owner()
+    @admin_ctrl.command()
     async def evaluate(self, ctx: cmd.Context, *, command: str = ''):
         """Allows me to better fix the bot without restarting it."""
         try:
@@ -247,12 +259,33 @@ if __name__ == '__main__':
 
         logging.getLogger().addHandler(handler)
 
+        # https://docs.pycord.dev/en/stable/api.html?highlight=intents#discord.Intents
+        intents = discord.Intents(
+            guilds=True,
+            members=True,
+            bans=False,
+            emojis_and_stickers=False,
+            integrations=False,
+            webhooks=False,
+            invites=False,
+            voice_states=True,
+            presences=False,
+            messages=True,
+            reactions=False,
+            typing=False,
+            message_content=True,
+            # scheduled_events=False,
+            auto_moderation_configuration=False,
+            auto_moderation_execution=False,
+        )
+
         # Callable function needs signature of (cmd.Bot, discord.Message)
-        _bot = cmd.Bot(command_prefix=get_guild_prefix,
-                       owner_id=612101930985979925)
+        _bot = cmd.Bot(command_prefix=lambda bot, __: bot.user.mention,
+                       owner_id=612101930985979925,
+                       intents=intents)
         _bot.load_extension('main')
         cog_manager.load_extensions(_bot, ['vc_log'])
-        # _bot.help_command = cog_manager.HelpCommand()
+        # # _bot.help_command = cog_manager.HelpCommand()
         cog_manager.load_guild_settings(_bot)
         pass
         with open(r'saves/bot_key.json') as file:

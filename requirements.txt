@@ -1,2 +1,2 @@
 PyYAML~=6.0
-py-cord~=1.7.3
+py-cord>=2
