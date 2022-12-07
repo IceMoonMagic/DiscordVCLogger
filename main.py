@@ -2,9 +2,9 @@
 import datetime as dt
 import logging
 import sys
-from asyncio import sleep
+from asyncio import create_task, sleep
 from logging.handlers import RotatingFileHandler
-from typing import Tuple
+from typing import Coroutine, Tuple
 
 import discord
 import discord.ext.commands as cmd
@@ -84,6 +84,7 @@ class System(cog_manager.Cog):
         self.prefixes = {}
         super().__init__(bot)
         self._save_attrs.add('prefixes')
+        self.shutdown_coroutines: list[Coroutine] = []
 
     settings = discord.SlashCommandGroup('settings', 'Settings for the bot.')
 
@@ -145,18 +146,26 @@ class System(cog_manager.Cog):
     admin_ctrl = settings.create_subgroup('bot', 'Bot maintenance settings',
                                           checks=[cmd.is_owner])
 
+    def add_shutdown_step(self, coro: Coroutine):
+        self.shutdown_coroutines.append(coro)
+
     # @cmd.command(hidden=True, name='shutdown')
     # @cmd.is_owner()
     @admin_ctrl.command(name='shutdown')
     async def shutdown_command(self, ctx: discord.ApplicationContext):
-        """Does actions necessary to end execution of the bot."""
-        logger.info('Shutting down.')
-        cog_manager.call_shutdown(self.bot)
-        await ctx.send(embed=discord.Embed(title='Shutting Down'))
-        # cog_manager.save_guild_settings(self.bot)
-        # saving.guild_prefixes_save(_guild_prefixes)
-        while not cog_manager.shutdown_complete(self.bot):
-            await sleep(.5)
+        """Does necessary actions to end execution of the bot."""
+        logger.info('Beginning shutdown process.')
+
+        await ctx.defer()
+
+        tasks = []  # Python 3.11 ToDo: asyncio.TaskGroup
+        for coro in self.shutdown_coroutines:
+            tasks.append(create_task(coro))
+        for task in tasks:
+            await task
+
+        await ctx.respond(embed=discord.Embed(
+            title='Shutting Down'))
         await self.bot.close()
 
     # @cmd.command(hidden=True)
