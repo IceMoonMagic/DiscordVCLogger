@@ -1,2 +1,3 @@
 PyYAML~=6.0
-py-cord>=2
+py-cord~=2.3
+genshin~=1.4

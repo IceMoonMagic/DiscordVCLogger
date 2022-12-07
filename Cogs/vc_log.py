@@ -6,7 +6,7 @@ import enum
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Generator, List, Optional, Set, Union
+from typing import Any, Iterator
 
 import discord
 import discord.ext.commands as cmd
@@ -86,7 +86,7 @@ class VcLog(Cog):
         _full_log: Any = dc.field(
             default_factory=list, init=False)
         # member_count: int = dc.field(default=0, init=False)
-        _members: Set[int] = dc.field(default_factory=set, init=False)
+        _members: set[int] = dc.field(default_factory=set, init=False)
 
         @dc.dataclass(frozen=True)
         class VoiceEvent:
@@ -178,10 +178,10 @@ class VcLog(Cog):
             # self._channel_event(event_log, self._absent, self._present)
             # self.member_count -= 1
 
-        def log_iterator(self, event_types: Set[VoiceStateChange] = None,
-                         include: Set[int] = None, exclude: Set[int] = None, *,
+        def log_iterator(self, event_types: set[VoiceStateChange] = None,
+                         include: set[int] = None, exclude: set[int] = None, *,
                          newest_first: bool = True, unique: bool = True) \
-                -> Generator[VoiceEvent, None, None]:
+                -> Iterator[VoiceEvent, None, None]:
             if include is None:
                 include = self._members
             if exclude is not None:
@@ -345,10 +345,8 @@ class VcLog(Cog):
         #     return
 
     def _moved(self, member: discord.Member,
-               old_channel: Union[
-                   discord.VoiceChannel, discord.StageChannel],
-               new_channel: Union[
-                   discord.VoiceChannel, discord.StageChannel],
+               old_channel: discord.VoiceChannel | discord.StageChannel,
+               new_channel: discord.VoiceChannel | discord.StageChannel,
                old_afk: bool = False, new_afk: bool = False):
 
         if old_channel is not None:
@@ -371,7 +369,7 @@ class VcLog(Cog):
 
     @log_command_group.command()
     async def joined(self, ctx: discord.ApplicationContext, *,
-                     channel: Optional[discord.VoiceChannel],
+                     channel: discord.VoiceChannel | None,
                      amount: int = -1):
         # async def joined(self, ctx: discord.ApplicationContext):
         """Shows who have joined your VC and how long ago."""
@@ -382,7 +380,7 @@ class VcLog(Cog):
 
     @log_command_group.command()
     async def left(self, ctx: discord.ApplicationContext, *,
-                   channel: Optional[discord.VoiceChannel],
+                   channel: discord.VoiceChannel | None,
                    amount: int = -1):
         # async def left(self, ctx: discord.ApplicationContext):
         """Shows who have left your VC and how long ago."""
@@ -393,8 +391,8 @@ class VcLog(Cog):
 
     def _vc_log_embed(self, ctx: discord.ApplicationContext,
                       vsc_type: VoiceStateChange,
-                      amount: int = -1, only_present: Optional[bool] = True,
-                      channel: Optional[discord.VoiceChannel] = None) \
+                      amount: int = -1, only_present: bool | None = True,
+                      channel: discord.VoiceChannel | None = None) \
             -> discord.Embed:
         """Creates an embed with for the VC Log"""
         # Filter for if command caller is not in a voice chat
