@@ -1,6 +1,5 @@
 """Functions to help managing Cogs."""
 
-import logging
 import re
 from datetime import datetime
 
@@ -8,7 +7,9 @@ import discord
 import discord.ext.commands as cmd
 from discord import ApplicationContext
 
-logger = logging.getLogger(__name__)
+import database as db
+
+logger = db.get_logger(__name__)
 
 
 def load_extensions(bot: cmd.Bot, cogs: list[str | cmd.Cog]):
@@ -35,16 +36,16 @@ class Cog(cmd.Cog):
             self.error_color = discord.Color.dark_red()
         else:
             self.error_color = error_color
-        self._save_attrs = {'_disabled_commands'}
-        self._disabled_commands = {}  # {com.name: {} for com in self.get_commands()}
-        for command in self.get_commands():
-            if not hasattr(command, 'hidden') or not command.hidden:
-                # if not command.hidden:
-                self._disabled_commands[command.name] = set()
-        try:
-            self.load_file()
-        except FileNotFoundError:
-            pass
+        # self._save_attrs = {'_disabled_commands'}
+        # self._disabled_commands = {}  # {com.name: {} for com in self.get_commands()}
+        # for command in self.get_commands():
+        #     if not hasattr(command, 'hidden') or not command.hidden:
+        #         # if not command.hidden:
+        #         self._disabled_commands[command.name] = set()
+        # try:
+        #     self.load_file()
+        # except FileNotFoundError:
+        #     pass
 
     def cog_check(self, ctx):
         if ctx.command.qualified_name not in self._disabled_commands or \
@@ -57,20 +58,22 @@ class Cog(cmd.Cog):
 
     # @cmd.Cog.listener()
     async def cog_command_error(self,
-            ctx: ApplicationContext, error: discord.ApplicationCommandError):
+                                ctx: ApplicationContext,
+                                error: discord.ApplicationCommandError):
         """Catches when a command throws an error."""
         if isinstance(error, cmd.CommandNotFound):
             return
         elif isinstance(error, cmd.DisabledCommand):
-            await ctx.respond(self._make_error(
+            await ctx.respond(embed=self._make_error(
                 ctx, 'Command is Disabled',
                 f'Command `{ctx.command.qualified_name}` is '
                 f'disabled and therefore cannot be used.'))
             return
         raise_it = False
-        logger.info(f'Command Error: {ctx.command.qualified_name}'
-                    f' invoked by {ctx.author.id} ({ctx.author.display_name})'
-                    f' which raised a(n) {type(error)}.')
+        logger.warning(
+            f'Command Error: {ctx.command.qualified_name}'
+            f' invoked by {ctx.author.id} ({ctx.author.display_name})'
+            f' which raised a(n) {type(error)}.')
         # ToDo: Look into more
         if isinstance(error, cmd.MissingRequiredArgument):
             expected = len(ctx.command.clean_params)
@@ -112,7 +115,7 @@ class Cog(cmd.Cog):
                    f'<@{self.bot.owner_id}>'
             raise_it = True
 
-        await ctx.respond(self._make_error(ctx, title, desc))
+        await ctx.respond(embed=self._make_error(ctx, title, desc))
 
         if raise_it:
             raise error
@@ -143,8 +146,10 @@ class Cog(cmd.Cog):
             title=title, description=desc, color=color))
 
     @staticmethod
-    def _regex_args(string: str, expected: set, error_unknown: bool = True) -> dict:
-        tokens = [i for i in re.split("(\s|\".*?\"|'.*?')", string) if i.strip()]
+    def _regex_args(string: str, expected: set,
+                    error_unknown: bool = True) -> dict:
+        tokens = [i for i in re.split("(\s|\".*?\"|'.*?')", string) if
+                  i.strip()]
         args = {None: {'raw': tokens, 'unexpected': {}}}
         for t in range(len(tokens)):
             if tokens[t] is not None and tokens[t] not in expected:

@@ -3,7 +3,6 @@
 
 import dataclasses as dc
 import enum
-import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Iterator
@@ -12,10 +11,10 @@ import discord
 import discord.ext.commands as cmd
 
 from .cog_manager import Cog, get_time_str
+import database as db
 
-# import tools
 
-logger = logging.getLogger(__name__)
+logger = db.get_logger(__name__)
 
 
 def setup(bot: cmd.Bot):

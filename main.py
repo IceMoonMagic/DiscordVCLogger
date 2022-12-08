@@ -12,7 +12,7 @@ import yaml
 
 from Cogs import cog_manager
 
-logger = logging.getLogger(__name__)
+logger = db.get_logger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format='{asctime}|{levelname}|{name}\n\t{message}\n',
                     datefmt='%Y-%m-%d %H:%M:%S', style='{')
@@ -266,7 +266,7 @@ if __name__ == '__main__':
             f'logs/{now.strftime("%Y-%m-%d--%H-%M-%S")}.log', maxBytes=524288,
             backupCount=3)
 
-        logging.getLogger().addHandler(handler)
+        db.get_logger().addHandler(handler)
 
         # https://docs.pycord.dev/en/stable/api.html?highlight=intents#discord.Intents
         intents = discord.Intents(
