@@ -1,47 +1,17 @@
 """Functions to help managing Cogs."""
-# from __future__ import annotations
 
 import logging
 import re
 from datetime import datetime
-from typing import Union, List
 
 import discord
-from discord import ApplicationContext
 import discord.ext.commands as cmd
-import yaml
+from discord import ApplicationContext
 
 logger = logging.getLogger(__name__)
 
 
-def file_path(filename: str) -> str:
-    return f'saves/{filename}.yaml'
-
-
-def save_guild_settings(bot: cmd.Bot):
-    # out = {guild_id: {'prefix': prefixes[guild_id]} for guild_id in prefixes}
-    out = {}
-    for cog_name in bot.cogs:
-        cog = bot.get_cog(cog_name)
-        if not isinstance(cog, Cog):
-            continue
-        out[cog_name] = cog.save_settings()
-    with open(r'saves/guild_settings.yaml', 'w') as save_file:
-        save_file.seek(0)
-        save_file.truncate()
-        yaml.safe_dump(out, save_file)
-
-
-def load_guild_settings(bot: cmd.Bot):
-    with open(r'saves/guild_settings.yaml') as save_file:
-        data = yaml.safe_load(save_file)
-    for cog_name in data:
-        cog = bot.get_cog(cog_name)
-        if cog is not None and isinstance(cog, Cog):
-            cog.load_settings(data[cog_name])
-
-
-def load_extensions(bot: cmd.Bot, cogs: List[Union[str, cmd.Cog]]):
+def load_extensions(bot: cmd.Bot, cogs: list[str | cmd.Cog]):
     for cog in cogs:
         if isinstance(cog, str):
             bot.load_extension(f'Cogs.{cog}')
@@ -50,33 +20,6 @@ def load_extensions(bot: cmd.Bot, cogs: List[Union[str, cmd.Cog]]):
         else:
             raise ValueError(f'cogs elements must be str or a subclass of '
                              f'discord.ext.commands.Cog, got {type(cog)}')
-
-    #     _bot.add_cog(_System(_bot))
-    # for cog in reversed(['vc_log', 'Misc', 'error']):
-    #     _bot.load_extension(f'Cogs.{cog}')
-
-
-def call_shutdown(bot: cmd.Bot) -> dict:
-    """Sends signals to the Cogs to start shutting down."""
-    saved_settings = {}
-    for cog_name in bot.cogs:
-        cog = bot.get_cog(cog_name)
-        if isinstance(cog, Cog):
-            saved_settings[cog_name] = cog.save_settings()
-            cog.shutdown()
-    return saved_settings
-
-
-def shutdown_complete(bot: cmd.Bot) -> bool:
-    """Determines if all Cogs are done shutting down."""
-    # complete = True
-    for cog_name, cog in list(bot.cogs.items()):
-        if isinstance(cog, Cog):
-            if not cog.shutdown_complete():
-                return False
-            else:
-                bot.remove_cog(cog_name)
-    return True
 
 
 class Cog(cmd.Cog):
@@ -102,45 +45,6 @@ class Cog(cmd.Cog):
             self.load_file()
         except FileNotFoundError:
             pass
-
-    def shutdown(self) -> None:
-        pass
-
-    def shutdown_complete(self) -> bool:
-        return True
-
-    def save_settings(self, guild_id: int = None) -> dict:
-        if guild_id is None:
-            # return {'_disabled_commands': self._disabled_commands}
-            return {name: self.__dict__[name] for name in self._save_attrs}
-
-    def load_settings(self, settings: dict, guild_id: int = None) -> None:
-        for attr in settings:
-            if not hasattr(self, attr):
-                raise AttributeError(
-                    f'Unknown Attribute: {attr} for {type(self)}')
-            if isinstance(self.__getattribute__(attr), dict):
-                self.__getattribute__(attr).update(settings[attr])
-            else:
-                setattr(self, attr, settings[attr])
-
-    def save_file(self, filename: str = None):
-        if filename is None:
-            filename = self.qualified_name
-        with open(file_path(filename), 'w') as file:
-            file.seek(0)
-            file.truncate()
-            yaml.safe_dump(self.save_settings(), file)
-
-    def load_file(self, filename: str = None):
-        if filename is None:
-            filename = self.qualified_name
-        with open(file_path(filename), 'r') as file:
-            self.load_settings(yaml.safe_load(file))
-
-    def cog_unload(self):
-        self.save_file()
-        super().cog_unload()
 
     def cog_check(self, ctx):
         if ctx.command.qualified_name not in self._disabled_commands or \
@@ -254,54 +158,10 @@ class Cog(cmd.Cog):
         return args
 
 
-def get_time_str(time: Union[datetime, int],
+def get_time_str(time: datetime | int,
                  time_format: str = '') -> str:
     if time_format not in {'', 't', 'T', 'd', 'D', 'f', 'F', 'R'}:
         raise ValueError(f'Unrecognized time format {time_format}')
     if isinstance(time, datetime):
         time = int(time.timestamp())
     return f'<t:{time}:{time_format}>'
-
-# class HelpCommand(cmd.DefaultHelpCommand):
-#
-#     async def send_bot_help(self, mapping):
-#         ctx = self.context
-#         text = {}
-#         for command in ctx.bot.commands:
-#             if command.hidden:
-#                 continue
-#             if command.cog_name not in text:
-#                 text[command.cog_name] = ''
-#             help_str = command.help.split("\n")[0]
-#             text[command.cog_name] += f'\n{command.name}\t-\t{help_str}'
-#
-#         unsorted = text[None]
-#         del text[None]
-#
-#         embed = discord.Embed(color=ctx.me.color)
-#         for key in sorted(list(text), key=str.casefold):
-#             embed.add_field(name=key, value=text[key], inline=False)
-#         embed.add_field(name='Misc', value=unsorted, inline=False)
-#         await self.get_destination().send(embed=embed)
-#
-#     async def send_cog_help(self, cog):
-#         ctx = self.context
-#
-#         embed = discord.Embed(title=f'{cog.qualified_name} Help',
-#                               description=cog.description,
-#                               color=ctx.me.color)
-#         for command in cog.get_commands():
-#             if not command.hidden:
-#                 embed.add_field(name=command.name,
-#                                 value=command.help,
-#                                 inline=False)
-#         await self.get_destination().send(embed=embed)
-#
-#     # async def send_group_help(self, group):
-#     #     pass
-#
-#     async def send_command_help(self, command):
-#         pass
-#
-#     # async def send_error_message(self, error):
-#     #     pass
