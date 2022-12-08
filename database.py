@@ -7,7 +7,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-from typing import AsyncIterable, Iterable, Optional
+from typing import AsyncIterable, Generic, Iterable, TypeVar
 
 
 def setup_logging():
@@ -25,7 +25,7 @@ def setup_logging():
     console_handler = logging.StreamHandler(sys.stdout)
 
     formatter = logging.Formatter(
-        '{asctime}|{levelname}|{name}\n\t{message}\n',
+        '{asctime}|{levelname}|{name}|{message}',
         '%Y-%m-%d %H:%M:%S', "{")
 
     error_handler.setFormatter(formatter)
@@ -58,13 +58,15 @@ logger = get_logger(__name__)
 DB_FILE = r'saves/database.db'
 SQL_CAST = {bool: 'bool', int: 'int', str: 'nvarchar'}
 
+DATA = TypeVar("DATA", bound='Storable')
 
-class Storable:
+
+class Storable(Generic[DATA]):
 
     table_name = 'Storable'
     primary_key_name = 'table_name'
 
-    def __init_subclass__(cls: type['Storable'], **kwargs):
+    def __init_subclass__(cls: type[DATA], **kwargs):
         if cls.table_name == super(cls, cls).table_name:
             cls.table_name = cls.__name__
 
@@ -78,7 +80,7 @@ class Storable:
         await save_data(self)
 
     @classmethod
-    async def load(cls, primary_key) -> Optional['Storable']:
+    async def load(cls, primary_key) -> DATA | None:
         where = f'{cls.primary_key_name} = {primary_key}'
         if len(results := await load_data_all(cls, where=where)) > 1:
             raise RuntimeError(f'More than one result ({len(results)})')
@@ -87,11 +89,11 @@ class Storable:
         return None
 
     @classmethod
-    async def load_all(cls, **where) -> list['Storable']:
+    async def load_all(cls, **where) -> list[DATA]:
         return await load_data_all(cls, **where)
 
     @classmethod
-    def load_iter(cls, **where) -> AsyncIterable['Storable']:
+    def load_iter(cls, **where) -> AsyncIterable[DATA]:
         return load_data_iter(cls, **where)
 
 
@@ -192,8 +194,8 @@ def _generate_where(**where) -> str:
     return command[:-5]
 
 
-async def load_data_all(data_type: type[Storable], **where) \
-        -> list[Storable]:
+async def load_data_all(data_type: type[DATA], **where) \
+        -> list[DATA]:
     if not await does_table_exist(data_type.table_name):
         return []
 
@@ -205,8 +207,8 @@ async def load_data_all(data_type: type[Storable], **where) \
     return [data_type(*row) for row in results]
 
 
-async def load_data_iter(data_type: type[Storable], **where) \
-        -> AsyncIterable[Storable]:
+async def load_data_iter(data_type: type[DATA], **where) \
+        -> AsyncIterable[DATA]:
     if not await does_table_exist(data_type.table_name):
         return
 
