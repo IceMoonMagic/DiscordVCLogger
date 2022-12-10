@@ -10,7 +10,9 @@ import time
 from typing import AsyncIterable, Generic, Iterable, TypeVar
 
 
-def setup_logging():
+def setup_logging(to_stdout: bool = True,
+                  local_level: int = logging.INFO,
+                  root_level: int = logging.WARNING):
     logging.Formatter.converter = time.gmtime
 
     now = dt.datetime.utcnow().astimezone(dt.timezone.utc)
@@ -25,7 +27,7 @@ def setup_logging():
     console_handler = logging.StreamHandler(sys.stdout)
 
     formatter = logging.Formatter(
-        '{asctime}|{levelname}|{name}|{message}',
+        '{asctime}|{levelname}|{lineno}|{name}|{message}',
         '%Y-%m-%d %H:%M:%S', "{")
 
     error_handler.setFormatter(formatter)
@@ -33,12 +35,15 @@ def setup_logging():
     console_handler.setFormatter(formatter)
 
     _logger = logging.getLogger(LOG_NAME)
-    _logger.setLevel(logging.INFO)
-    error_handler.setLevel(logging.WARNING)
+    _logger.setLevel(local_level)
 
-    logging.getLogger().addHandler(error_handler)
     _logger.addHandler(file_handler)
-    _logger.addHandler(console_handler)
+    if to_stdout:
+        _logger.addHandler(console_handler)
+
+    error_handler.setLevel(logging.WARNING)
+    logging.getLogger().setLevel(root_level)
+    logging.getLogger().addHandler(error_handler)
 
 
 def get_logger(name) -> logging.Logger:
@@ -103,7 +108,8 @@ async def does_table_exist(table_name) -> bool:
         try:
             await db.execute(f'SELECT * FROM {table_name}')
             return True
-        except sql.OperationalError:
+        except sql.OperationalError as e:
+            logger.debug(e)
             return False
 
 
@@ -116,7 +122,7 @@ async def make_table(blueprint: Storable):
 
 
 async def make_table_if_not_exist(blueprint: Storable):
-    if not await does_table_exist(blueprint.__class__.__name__):
+    if not await does_table_exist(blueprint.table_name):
         await make_table(blueprint)
 
 
