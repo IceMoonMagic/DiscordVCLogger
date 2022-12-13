@@ -37,64 +37,6 @@ class Cog(cmd.Cog):
         else:
             self.error_color = error_color
 
-    # @cmd.Cog.listener()
-    async def cog_command_error(self,
-                                ctx: ApplicationContext,
-                                error: discord.ApplicationCommandError):
-        """Catches when a command throws an error."""
-        if isinstance(error, cmd.CommandNotFound):
-            return
-        raise_it = False
-        logger.warning(
-            f'Command Error: {ctx.command.qualified_name}'
-            f' invoked by {ctx.author.id} ({ctx.author.display_name})'
-            f' which raised a(n) {type(error)}.')
-        # ToDo: Look into more
-        if isinstance(error, cmd.MissingRequiredArgument):
-            expected = len(ctx.command.clean_params)
-            given = expected - len(error.args)
-            title = 'Missing or Invalid Arguments'
-            desc = f'Expected: {expected}, Received: {given}'
-
-        elif isinstance(error, (cmd.UnexpectedQuoteError,
-                                cmd.ExpectedClosingQuoteError,
-                                cmd.InvalidEndOfQuotedStringError)):
-            title = 'Quote Error'
-            desc = 'Due to the way arguments are handled, ' \
-                   'the " (Double Quote) has the following limitations:\n' \
-                   ' - Cannot be used as an argument itself\n' \
-                   ' - Must always be used in pairs\n' \
-                   ' - Must have a space after closing\n' \
-                   'Also, note that anything within quotes will count ' \
-                   'as a single argument rather than separated by spaces.'
-
-        elif isinstance(error,
-                        (cmd.MissingPermissions, cmd.BotMissingPermissions)):
-            title, desc = 'Missing Permissions', ''
-            if isinstance(error, cmd.BotMissingPermissions):
-                title = f'Bot {title}'
-            first = True
-            for permission in error.missing_permissions:
-                if not first:
-                    desc += '\n'
-                first = False
-                desc += f' - {permission}'
-
-        elif isinstance(error, cmd.NotOwner):
-            title = 'Not Owner'
-            desc = f'Only <@{self.bot.owner_id}> can use this command.'
-
-        else:
-            title = 'Unexpected Command Error'
-            desc = 'If this issue persists, please inform ' \
-                   f'<@{self.bot.owner_id}>'
-            raise_it = True
-
-        await ctx.respond(embed=self._make_error(ctx, title, desc))
-
-        if raise_it:
-            raise error
-
     @staticmethod
     def _make_error(
             ctx: ApplicationContext, title: str = 'Error',
