@@ -36,25 +36,6 @@ class Cog(cmd.Cog):
             self.error_color = discord.Color.dark_red()
         else:
             self.error_color = error_color
-        # self._save_attrs = {'_disabled_commands'}
-        # self._disabled_commands = {}  # {com.name: {} for com in self.get_commands()}
-        # for command in self.get_commands():
-        #     if not hasattr(command, 'hidden') or not command.hidden:
-        #         # if not command.hidden:
-        #         self._disabled_commands[command.name] = set()
-        # try:
-        #     self.load_file()
-        # except FileNotFoundError:
-        #     pass
-
-    def cog_check(self, ctx):
-        if ctx.command.qualified_name not in self._disabled_commands or \
-                ctx.guild is None:
-            return True
-        if ctx.guild.id not in \
-                self._disabled_commands[ctx.command.qualified_name]:
-            return True
-        raise cmd.DisabledCommand()
 
     # @cmd.Cog.listener()
     async def cog_command_error(self,
@@ -62,12 +43,6 @@ class Cog(cmd.Cog):
                                 error: discord.ApplicationCommandError):
         """Catches when a command throws an error."""
         if isinstance(error, cmd.CommandNotFound):
-            return
-        elif isinstance(error, cmd.DisabledCommand):
-            await ctx.respond(embed=self._make_error(
-                ctx, 'Command is Disabled',
-                f'Command `{ctx.command.qualified_name}` is '
-                f'disabled and therefore cannot be used.'))
             return
         raise_it = False
         logger.warning(
