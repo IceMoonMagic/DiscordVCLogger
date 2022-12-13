@@ -7,7 +7,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-from typing import AsyncIterable, Generic, Iterable, TypeVar
+from typing import AsyncGenerator, Generic, Iterable, TypeVar
 
 
 def setup_logging(to_stdout: bool = True,
@@ -63,15 +63,15 @@ logger = get_logger(__name__)
 DB_FILE = r'saves/database.db'
 SQL_CAST = {bool: 'bool', int: 'int', str: 'nvarchar'}
 
-DATA = TypeVar("DATA", bound='Storable')
+S = TypeVar("S", bound='Storable')
 
 
-class Storable(Generic[DATA]):
+class Storable(Generic[S]):
 
     table_name = 'Storable'
     primary_key_name = 'table_name'
 
-    def __init_subclass__(cls: type[DATA], **kwargs):
+    def __init_subclass__(cls: type[S], **kwargs):
         if cls.table_name == super(cls, cls).table_name:
             cls.table_name = cls.__name__
 
@@ -81,25 +81,53 @@ class Storable(Generic[DATA]):
                                  f'{list[cls.__annotations__]}')
         super().__init_subclass__()
 
-    async def save(self):
+    def __post_init__(self: S) -> S:
+        for attr, type_ in self.__annotations__.items():
+            if not isinstance(value := getattr(self, attr), type_):
+                setattr(self, attr, type_(value))
+        return self
+
+    def copy(self: S) -> S:
+        attributes = {}
+        for attribute in self.__annotations__:
+            attributes[attribute] = getattr(self, attribute)
+        return self.__class__(**attributes)
+
+    def update(self: S, *,
+               update_inplace: bool = True,
+               **kwargs) -> S:
+        work_on: S = self if update_inplace else self.copy()
+        for kw, arg in kwargs.items():
+            setattr(work_on, kw, arg)
+        return work_on.__post_init__()
+
+    async def save(self: S):
         await save_data(self)
 
     @classmethod
-    async def load(cls, primary_key) -> DATA | None:
+    async def load(cls: type[S], primary_key) -> S | None:
         where = f'{cls.primary_key_name} = {primary_key}'
-        if len(results := await load_data_all(cls, where=where)) > 1:
-            raise RuntimeError(f'More than one result ({len(results)})')
-        if len(results) == 1:
-            return results[0]
-        return None
+        try:
+            return await anext(cls.load_gen(where=where))
+        except StopAsyncIteration:
+            return None
 
     @classmethod
-    async def load_all(cls, **where) -> list[DATA]:
+    async def load_all(cls: type[S], **where) -> list[S]:
         return await load_data_all(cls, **where)
 
     @classmethod
-    def load_iter(cls, **where) -> AsyncIterable[DATA]:
-        return load_data_iter(cls, **where)
+    def load_gen(cls: type[S], **where) -> AsyncGenerator[S, None]:
+        return load_data_gen(cls, **where)
+
+    @classmethod
+    async def delete(cls, primary_key):
+        where = f'{cls.primary_key_name} = {primary_key}'
+        await cls.delete_all(where=where)
+
+    @classmethod
+    async def delete_all(cls, **where):
+        await delete(cls, **where)
 
 
 async def does_table_exist(table_name) -> bool:
@@ -131,6 +159,15 @@ async def _write_db(command: str):
     async with sql.connect(DB_FILE) as db:
         await db.execute(command)
         await db.commit()
+
+
+async def delete(data_type: type[S], **where):
+    if not await does_table_exist(data_type.table_name):
+        return
+
+    command = f'DELETE FROM {data_type.table_name} ' \
+              f'{_generate_where(**where)}'
+    await _write_db(command)
 
 
 async def _update_row(data: Storable):
@@ -200,8 +237,8 @@ def _generate_where(**where) -> str:
     return command[:-5]
 
 
-async def load_data_all(data_type: type[DATA], **where) \
-        -> list[DATA]:
+async def load_data_all(data_type: type[S], **where) \
+        -> list[S]:
     if not await does_table_exist(data_type.table_name):
         return []
 
@@ -213,8 +250,8 @@ async def load_data_all(data_type: type[DATA], **where) \
     return [data_type(*row) for row in results]
 
 
-async def load_data_iter(data_type: type[DATA], **where) \
-        -> AsyncIterable[DATA]:
+async def load_data_gen(data_type: type[S], **where) \
+        -> AsyncGenerator[S, None]:
     if not await does_table_exist(data_type.table_name):
         return
 
