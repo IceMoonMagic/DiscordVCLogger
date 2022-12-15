@@ -183,7 +183,7 @@ def autogenerate_options(fn):
         name, docs = re.findall(r'([\w\d]+):\s([\w\W]+)', param)[0]
         anno = fn.__annotations__.get(name) or str
         match anno:
-            case discord.ApplicationContext() | discord.Interaction():
+            case discord.ApplicationContext | discord.Interaction:
                 continue
             case discord.Option():
                 if anno.description == 'No description provided':
