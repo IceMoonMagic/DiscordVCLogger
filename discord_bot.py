@@ -1,11 +1,9 @@
 import argparse
 import logging
 
-import database as db
-import system
-from Cogs import cog_manager
+import discord.ext.commands as cmd
 
-bot = system.bot
+import database as db
 
 
 def make_argparse() -> argparse.ArgumentParser:
@@ -26,12 +24,14 @@ def main():
     )
     logger = db.get_logger(__name__)
 
+    bot = cmd.Bot()
+
     bot_info = db.get_json_data()
     bot.owner_ids = bot_info['owners']
     key = bot_info['key']
     del bot_info
 
-    cog_manager.load_extensions(bot, ['hoyolab'])
+    bot.load_extensions('system', 'extensions.hoyolab', 'extensions.vc_log')
 
     bot.run(key)
     logger.info('Shutdown Complete, End of Process')

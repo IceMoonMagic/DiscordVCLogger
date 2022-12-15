@@ -1,10 +1,10 @@
 import re
 from asyncio import create_task
+from datetime import datetime
 from typing import Coroutine
 
 import discord
 import discord.ext.commands as cmd
-from discord import ApplicationCommand, ApplicationContext
 
 import database as db
 
@@ -31,112 +31,117 @@ intents = discord.Intents(
 logger = db.get_logger(__name__)
 
 
-bot = cmd.Bot(intents=intents)
+def setup(bot: cmd.Bot):
+    logger.info(f'Loading Extension: {__name__}')
+    bot.add_cog(System(bot))
 
 
-@bot.listen()
-async def on_ready():
-    """Final Setup after Bot is fully connected to Discord"""
-    logger.info(f'Logged in as {bot.user.id} ({bot.user}).')
+def teardown(bot: cmd.Bot):
+    logger.info(f'Unloading Extension: {__name__}')
+    bot.remove_cog(System.qualified_name)
 
 
-@bot.listen()
-async def on_command(ctx: cmd.Context):
-    """Logs attempted execution of a command."""
-    logger.info(f'Command [{ctx.command.qualified_name}] invoked by'
-                f' {ctx.author.id} ({ctx.author.display_name})')
+class System(cmd.Cog):
+
+    def __init__(self, bot: cmd.Bot):
+        self.bot: cmd.Bot = bot
+        self.shutdown_coroutines: list[Coroutine] = []
+
+    @discord.slash_command(name='shutdown')
+    async def shutdown_command(self, ctx: discord.ApplicationContext):
+        """Does necessary actions to end execution of the bot."""
+        logger.info('Beginning shutdown process.')
+
+        await ctx.defer()
+
+        tasks = []  # Python 3.11 ToDo: asyncio.TaskGroup
+        for coro in self.shutdown_coroutines:
+            tasks.append(create_task(coro))
+        for task in tasks:
+            await task
+
+        await ctx.respond(embed=discord.Embed(
+            title='Shutting Down'))
+        await self.bot.close()
+
+    @cmd.Cog.listener()
+    async def on_ready(self):
+        """Final Setup after Bot is fully connected to Discord"""
+        logger.info(f'Logged in as {self.bot.user.id} ({self.bot.user}).')
+
+    @cmd.Cog.listener()
+    async def on_application_command(self, ctx: discord.ApplicationContext):
+        """Logs attempted execution of a command."""
+        logger.info(
+            f'User {ctx.author.id} invoked {ctx.command.qualified_name}')
+
+    @cmd.Cog.listener()
+    async def on_application_command_error(
+            self,
+            ctx: discord.ApplicationContext,
+            error: discord.ApplicationCommandError):
+        """Catches when a command throws an error."""
+        await ctx.defer()
+        raise_it = False
+
+        match error:
+            case cmd.CommandNotFound():
+                return
+
+            case cmd.DisabledCommand():
+                await ctx.respond(embed=make_error(
+                    'Command is Disabled',
+                    f'Command `{ctx.command.qualified_name}` is '
+                    f'disabled and therefore cannot be used.'))
+                return
+
+            case cmd.MissingPermissions() | cmd.BotMissingPermissions():
+                title, desc = 'Missing Permissions', ''
+                if isinstance(error, cmd.BotMissingPermissions):
+                    title = f'Bot {title}'
+                for i, permission in enumerate(error.missing_permissions):
+                    if i != 0:
+                        desc += '\n'
+                    desc += f' - {permission}'
+
+            case cmd.NotOwner():
+                title = 'Not Owner'
+                desc = f'Only bot owners can use this command.'
+
+            case cmd.CheckFailure():
+                title = 'Check Error'
+                desc = 'There is some condition that is not being met.'
+
+            case _:
+                title = 'Unexpected Command Error'
+                desc = f'If this issue persists, please inform ' \
+                       f'<@{self.bot.owner_ids[0]}>.'
+                raise_it = True
+
+        logger.warning(
+            f'Command Error: {ctx.author.id}'
+            f' invoked {ctx.command.qualified_name}'
+            f' which raised a(n) {type(error)}.')
+
+        await ctx.respond(embed=make_error(title, desc))
+
+        if raise_it:
+            raise error
 
 
-@bot.listen()
-async def on_application_command(ctx: discord.ApplicationContext):
-    """Logs attempted execution of a command."""
-    logger.info(f'User {ctx.author.id} invoked {ctx.command.qualified_name}')
+def add_shutdown_step(bot: cmd.Bot, coro: Coroutine):
+    foo = bot.get_cog(System.qualified_name)
+    if isinstance(foo, System):
+        foo.shutdown_coroutines.append(coro)
 
 
-shutdown_coroutines: list[Coroutine] = []
-
-
-def add_shutdown_step(coro: Coroutine):
-    shutdown_coroutines.append(coro)
-
-
-@bot.slash_command(name='shutdown')
-async def shutdown_command(ctx: discord.ApplicationContext):
-    """Does necessary actions to end execution of the bot."""
-    logger.info('Beginning shutdown process.')
-
-    await ctx.defer()
-
-    tasks = []  # Python 3.11 ToDo: asyncio.TaskGroup
-    for coro in shutdown_coroutines:
-        tasks.append(create_task(coro))
-    for task in tasks:
-        await task
-
-    await ctx.respond(embed=discord.Embed(
-        title='Shutting Down'))
-    await bot.close()
-
-
-@bot.listen()
-async def on_application_command_error(
-        ctx: ApplicationContext, error: discord.ApplicationCommandError):
-    """Catches when a command throws an error."""
-    await ctx.defer()
-    raise_it = False
-
-    match error:
-        case cmd.CommandNotFound():
-            return
-
-        case cmd.DisabledCommand():
-            await ctx.respond(embed=make_error(
-                'Command is Disabled',
-                f'Command `{ctx.command.qualified_name}` is '
-                f'disabled and therefore cannot be used.'))
-            return
-
-        case cmd.MissingPermissions() | cmd.BotMissingPermissions():
-            title, desc = 'Missing Permissions', ''
-            if isinstance(error, cmd.BotMissingPermissions):
-                title = f'Bot {title}'
-            for i, permission in enumerate(error.missing_permissions):
-                if i != 0:
-                    desc += '\n'
-                desc += f' - {permission}'
-
-        case cmd.NotOwner():
-            title = 'Not Owner'
-            desc = f'Only bot owners can use this command.'
-
-        case cmd.CheckFailure():
-            title = 'Check Error'
-            desc = 'There is some condition that is not being met.'
-
-        case _:
-            title = 'Unexpected Command Error'
-            desc = f'If this issue persists, please inform ' \
-                   f'<@{bot.owner_ids[0]}>.'
-            raise_it = True
-
-    logger.warning(
-        f'Command Error: {ctx.author.id}'
-        f' invoked {ctx.command.qualified_name}'
-        f' which raised a(n) {type(error)}.')
-
-    await ctx.respond(embed=make_error(title, desc))
-
-    if raise_it:
-        raise error
-
-
-async def get_dm(user_id: int, _bot: cmd.Bot = bot) -> discord.DMChannel:
-    user = await _bot.get_or_fetch_user(user_id)
+async def get_dm(user_id: int, bot: cmd.Bot) -> discord.DMChannel:
+    user = await bot.get_or_fetch_user(user_id)
     return user.dm_channel or await user.create_dm()
 
 
 def make_embed(title: str = None, desc: str = None,
-               ctx: ApplicationContext = None,
+               ctx: discord.ApplicationContext = None,
                color: discord.Color = None,
                embed: discord.Embed = None,
                **kwargs) -> discord.Embed:
@@ -192,3 +197,12 @@ def autogenerate_options(fn):
                 fn.__annotations__[name] = discord.Option(
                     anno, description=docs)
     return fn
+
+
+def get_time_str(time: datetime | int,
+                 time_format: str = '') -> str:
+    if time_format not in {'', 't', 'T', 'd', 'D', 'f', 'F', 'R'}:
+        raise ValueError(f'Unrecognized time format {time_format}')
+    if isinstance(time, datetime):
+        time = int(time.timestamp())
+    return f'<t:{time}:{time_format}>'
