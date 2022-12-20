@@ -1,13 +1,15 @@
 import asyncio
-import sys
-
-import aiosqlite as sql
 import datetime as dt
 import json
 import logging
-from logging.handlers import RotatingFileHandler
+import sys
 import time
+from logging.handlers import RotatingFileHandler
 from typing import AsyncGenerator, Generic, Iterable, TypeVar
+
+import aiosqlite as sql
+import nacl.exceptions
+import nacl.secret
 
 
 def setup_logging(to_stdout: bool = True,
@@ -71,6 +73,9 @@ class Storable(Generic[S]):
     table_name = 'Storable'
     primary_key_name = 'table_name'
 
+    encrypt_attrs: list = []
+    box: nacl.secret.SecretBox | None = None
+
     def __init_subclass__(cls: type[S], **kwargs):
         if cls.table_name == super(cls, cls).table_name:
             cls.table_name = cls.__name__
@@ -79,6 +84,9 @@ class Storable(Generic[S]):
             raise AttributeError(f'{cls.__class__} has no annotation '
                                  f'{cls.primary_key_name}. Available: '
                                  f'{list[cls.__annotations__]}')
+        if cls.primary_key_name in cls.encrypt_attrs:
+            raise AttributeError(
+                f'primary_key_name ({cls.primary_key_name}) may not be encrypted.')
         super().__init_subclass__()
 
     def __post_init__(self: S) -> S:
@@ -102,15 +110,50 @@ class Storable(Generic[S]):
         return work_on.__post_init__()
 
     async def save(self: S):
-        await save_data(self)
+        if not self.is_ready():
+            raise nacl.exceptions.CryptoError('Encryption Key not yet provided.')
+
+        encrypted = {}
+        unique_chars: int = len(str(len(self.encrypt_attrs)))
+        primary_value = f'{getattr(self, self.primary_key_name)}'
+        nonce_base = f'{primary_value[:24-unique_chars]:0{24-unique_chars}}'
+        for i, attr in enumerate(self.encrypt_attrs):
+            nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
+
+            raw_value: str = getattr(self, attr)
+            bytes_value: bytes = raw_value.encode()
+            encrypted_value: bytes = self.box.encrypt(bytes_value, nonce).ciphertext
+            encrypted[attr] = encrypted_value.hex()
+
+        await save_data(self.update(update_inplace=False, **encrypted))
 
     @classmethod
-    async def load(cls: type[S], primary_key) -> S | None:
+    async def load(cls: type[S], primary_key, *, decrypt: bool = True) -> S | None:
+        if not cls.is_ready():
+            raise nacl.exceptions.CryptoError('Decryption Key not yet provided.')
+
         where = f'{cls.primary_key_name} = {primary_key}'
         try:
-            return await anext(cls.load_gen(where=where))
+            obj = await anext(cls.load_gen(where=where))
         except StopAsyncIteration:
             return None
+
+        if not decrypt:
+            return obj
+
+        decrypted = {}
+        unique_chars: int = len(str(len(cls.encrypt_attrs)))
+        primary_value = f'{getattr(obj, obj.primary_key_name)}'
+        nonce_base = f'{primary_value[:24-unique_chars]:0{24-unique_chars}}'
+        for i, attr in enumerate(cls.encrypt_attrs):
+            nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
+
+            hex_value: str = getattr(obj, attr)
+            bytes_value = bytes.fromhex(hex_value)
+            decrypted_value: bytes = cls.box.decrypt(bytes_value, nonce)
+            decrypted[attr]: str = decrypted_value.decode()
+
+        return obj.update(update_inplace=True, **decrypted)
 
     @classmethod
     async def load_all(cls: type[S], **where) -> list[S]:
@@ -128,6 +171,20 @@ class Storable(Generic[S]):
     @classmethod
     async def delete_all(cls, **where):
         await delete(cls, **where)
+
+    @classmethod
+    def is_ready(cls) -> bool:
+        return len(cls.encrypt_attrs) == 0 or cls.box is not None
+
+    @classmethod
+    def set_key(cls, key: str | bytes):
+        if isinstance(key, str):
+            key = key.encode()
+        cls.box = nacl.secret.SecretBox(key)
+
+    @classmethod
+    def clear_key(cls):
+        cls.box = None
 
 
 async def does_table_exist(table_name) -> bool:

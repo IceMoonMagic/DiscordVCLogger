@@ -5,6 +5,8 @@ from typing import Coroutine
 
 import discord
 import discord.ext.commands as cmd
+import discord.ui
+import nacl.exceptions
 
 import database as db
 
@@ -87,6 +89,9 @@ class System(cmd.Cog):
             pass
         raise_it = False
 
+        if isinstance(error, discord.ApplicationCommandInvokeError):
+            error = error.original
+
         match error:
             case cmd.CommandNotFound():
                 return
@@ -114,6 +119,12 @@ class System(cmd.Cog):
             case cmd.CheckFailure():
                 title = 'Check Error'
                 desc = 'There is some condition that is not being met.'
+
+            case nacl.exceptions.CryptoError():
+                title = 'Crypto Error'
+                desc = 'This likely means that the current encryption ' \
+                       'key is different than when you stored your data. ' \
+                       'Please resubmit the necessary data to resume usage.'
 
             case _:
                 title = 'Unexpected Command Error'
@@ -209,3 +220,35 @@ def get_time_str(time: datetime | int,
     if isinstance(time, datetime):
         time = int(time.timestamp())
     return f'<t:{time}:{time_format}>'
+
+
+class UnlockModal(discord.ui.Modal):
+
+    def __init__(self, unlock_type: type[db.S], *children: discord.ui.InputText):
+        super().__init__(*children, title=unlock_type.__name__)
+
+        self.unlock_type = unlock_type
+
+        self.add_item(discord.ui.InputText(
+            label='Key',
+            placeholder='key',
+            min_length=32,
+            max_length=32))
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            self.unlock_type.set_key(self.children[0].value)
+            await interaction.followup.send(
+                ephemeral=True,
+                embed=make_embed(
+                    f'Unlocked {self.unlock_type.__name__}',
+                    color=interaction.guild.me.color
+                    if interaction.guild else None))
+        except ValueError as e:
+            await interaction.followup.send(
+                ephemeral=True,
+                embed=make_error(
+                    f'Failed to unlock {self.unlock_type.__name__}',
+                    f'{type(e).__name__}: {e}'))
