@@ -31,7 +31,7 @@ def main():
     key = bot_info['key']
     del bot_info
 
-    bot.load_extensions('system', 'extensions.hoyolab', 'extensions.vc_log')
+    bot.load_extensions('system', 'extensions.hoyolab')
 
     bot.run(key)
     logger.info('Shutdown Complete, End of Process')
