@@ -81,7 +81,10 @@ class System(cmd.Cog):
             ctx: discord.ApplicationContext,
             error: discord.ApplicationCommandError):
         """Catches when a command throws an error."""
-        await ctx.defer()
+        try:
+            await ctx.defer()
+        except discord.InteractionResponded:
+            pass
         raise_it = False
 
         match error:
