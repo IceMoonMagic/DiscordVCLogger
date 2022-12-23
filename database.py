@@ -69,7 +69,6 @@ S = TypeVar("S", bound='Storable')
 
 
 class Storable(Generic[S]):
-
     table_name = 'Storable'
     primary_key_name = 'table_name'
 
@@ -116,7 +115,7 @@ class Storable(Generic[S]):
         encrypted = {}
         unique_chars: int = len(str(len(self.encrypt_attrs)))
         primary_value = f'{getattr(self, self.primary_key_name)}'
-        nonce_base = f'{primary_value[:24-unique_chars]:0{24-unique_chars}}'
+        nonce_base = f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
         for i, attr in enumerate(self.encrypt_attrs):
             nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
 
@@ -127,41 +126,43 @@ class Storable(Generic[S]):
 
         await save_data(self.update(update_inplace=False, **encrypted))
 
-    @classmethod
-    async def load(cls: type[S], primary_key, *, decrypt: bool = True) -> S | None:
-        if not cls.is_ready():
+    def decrypt(self: S, decrypt_inplace: bool = True) -> S:
+        work_on: S = self if decrypt_inplace else self.copy()
+
+        if not work_on.is_ready():
             raise nacl.exceptions.CryptoError('Decryption Key not yet provided.')
 
+        unique_chars: int = len(str(len(work_on.encrypt_attrs)))
+        primary_value = f'{getattr(work_on, work_on.primary_key_name)}'
+        nonce_base = f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
+        for i, attr in enumerate(work_on.encrypt_attrs):
+            nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
+
+            hex_value: str = getattr(work_on, attr)
+            bytes_value = bytes.fromhex(hex_value)
+            decrypted_value: bytes = work_on.box.decrypt(bytes_value, nonce)
+            # decrypted[attr]: str = decrypted_value.decode()
+            setattr(work_on, attr, decrypted_value.decode())
+
+        return work_on
+
+    @classmethod
+    async def load(cls: type[S], primary_key, decrypt: bool = True) -> S | None:
         where = f'{cls.primary_key_name} = {primary_key}'
         try:
-            obj = await anext(cls.load_gen(where=where))
+            obj = await anext(cls.load_gen(where=where, decrypt=decrypt))
         except StopAsyncIteration:
             return None
 
-        if not decrypt:
-            return obj
-
-        decrypted = {}
-        unique_chars: int = len(str(len(cls.encrypt_attrs)))
-        primary_value = f'{getattr(obj, obj.primary_key_name)}'
-        nonce_base = f'{primary_value[:24-unique_chars]:0{24-unique_chars}}'
-        for i, attr in enumerate(cls.encrypt_attrs):
-            nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
-
-            hex_value: str = getattr(obj, attr)
-            bytes_value = bytes.fromhex(hex_value)
-            decrypted_value: bytes = cls.box.decrypt(bytes_value, nonce)
-            decrypted[attr]: str = decrypted_value.decode()
-
-        return obj.update(update_inplace=True, **decrypted)
+        return obj
 
     @classmethod
-    async def load_all(cls: type[S], **where) -> list[S]:
-        return await load_data_all(cls, **where)
+    async def load_all(cls: type[S], decrypt: bool = True, **where) -> list[S]:
+        return await load_data_all(cls, decrypt=decrypt, **where)
 
     @classmethod
-    def load_gen(cls: type[S], **where) -> AsyncGenerator[S, None]:
-        return load_data_gen(cls, **where)
+    def load_gen(cls: type[S], decrypt: bool = True, **where) -> AsyncGenerator[S, None]:
+        return load_data_gen(cls, decrypt=decrypt, **where)
 
     @classmethod
     async def delete(cls, primary_key):
@@ -294,7 +295,7 @@ def _generate_where(**where) -> str:
     return command[:-5]
 
 
-async def load_data_all(data_type: type[S], **where) \
+async def load_data_all(data_type: type[S], decrypt: bool = True, **where) \
         -> list[S]:
     if not await does_table_exist(data_type.table_name):
         return []
@@ -304,10 +305,12 @@ async def load_data_all(data_type: type[S], **where) \
     logger.debug(command)
     async with sql.connect(DB_FILE) as db:
         results = await db.execute_fetchall(command)
+    if decrypt:
+        return [data_type(*row).decrypt() for row in results]
     return [data_type(*row) for row in results]
 
 
-async def load_data_gen(data_type: type[S], **where) \
+async def load_data_gen(data_type: type[S], decrypt: bool = True, **where) \
         -> AsyncGenerator[S, None]:
     if not await does_table_exist(data_type.table_name):
         return
@@ -318,4 +321,6 @@ async def load_data_gen(data_type: type[S], **where) \
     async with sql.connect(DB_FILE) as db:
         async with db.execute(command) as cursor:
             async for row in cursor:
+                if decrypt:
+                    yield data_type(*row).decrypt()
                 yield data_type(*row)
