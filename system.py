@@ -49,7 +49,9 @@ class System(cmd.Cog):
         self.bot: cmd.Bot = bot
         self.shutdown_coroutines: list[Coroutine] = []
 
-    @discord.slash_command(name='shutdown')
+    system_cmds = discord.SlashCommandGroup('system')
+
+    @system_cmds.command(name='shutdown')
     async def shutdown_command(self, ctx: discord.ApplicationContext):
         """Does necessary actions to end execution of the bot."""
         logger.info('Beginning shutdown process.')
@@ -81,7 +83,7 @@ class System(cmd.Cog):
     async def on_application_command_error(
             self,
             ctx: discord.ApplicationContext,
-            error: discord.ApplicationCommandError):
+            error: discord.DiscordException):
         """Catches when a command throws an error."""
         try:
             await ctx.defer()
@@ -89,10 +91,13 @@ class System(cmd.Cog):
             pass
         raise_it = False
 
+        cause: Exception
         if isinstance(error, discord.ApplicationCommandInvokeError):
-            error = error.original
+            cause = error.original
+        else:
+            cause = error
 
-        match error:
+        match cause:
             case cmd.CommandNotFound():
                 return
 
@@ -105,9 +110,9 @@ class System(cmd.Cog):
 
             case cmd.MissingPermissions() | cmd.BotMissingPermissions():
                 title, desc = 'Missing Permissions', ''
-                if isinstance(error, cmd.BotMissingPermissions):
+                if isinstance(cause, cmd.BotMissingPermissions):
                     title = f'Bot {title}'
-                for i, permission in enumerate(error.missing_permissions):
+                for i, permission in enumerate(cause.missing_permissions):
                     if i != 0:
                         desc += '\n'
                     desc += f' - {permission}'
@@ -119,6 +124,18 @@ class System(cmd.Cog):
             case cmd.CheckFailure():
                 title = 'Check Error'
                 desc = 'There is some condition that is not being met.'
+
+            case db.MissingEncryptionKey():
+                table_name = cause.storable.table_name
+                class_name = cause.storable.__class__.__name__
+                if table_name == class_name:
+                    table = table_name
+                else:
+                    table = f'{class_name} / {table_name}'
+
+                title = 'Missing Encryption Key'
+                desc = f'Unable to encrypt/decrypt data for {table}. ' \
+                       f'Please inform <@{self.bot.owner_ids[0]}>.'
 
             case nacl.exceptions.CryptoError():
                 title = 'Crypto Error'
@@ -135,12 +152,12 @@ class System(cmd.Cog):
         logger.warning(
             f'Command Error: {ctx.author.id}'
             f' invoked {ctx.command.qualified_name}'
-            f' which raised a(n) {type(error)}.')
+            f' which raised a(n) {type(cause)}.')
 
         await ctx.respond(embed=make_error(title, desc))
 
         if raise_it:
-            raise error
+            raise cause
 
 
 def add_shutdown_step(bot: cmd.Bot, coro: Coroutine):

@@ -8,7 +8,6 @@ from logging.handlers import RotatingFileHandler
 from typing import AsyncGenerator, Generic, Iterable, TypeVar
 
 import aiosqlite as sql
-import nacl.exceptions
 import nacl.secret
 
 
@@ -68,7 +67,7 @@ SQL_CAST = {bool: 'bool', int: 'int', str: 'nvarchar'}
 S = TypeVar("S", bound='Storable')
 
 
-class Storable(Generic[S]):
+class Storable:
     table_name = 'Storable'
     primary_key_name = 'table_name'
 
@@ -85,7 +84,8 @@ class Storable(Generic[S]):
                                  f'{list[cls.__annotations__]}')
         if cls.primary_key_name in cls.encrypt_attrs:
             raise AttributeError(
-                f'primary_key_name ({cls.primary_key_name}) may not be encrypted.')
+                f'primary_key_name ({cls.primary_key_name}) '
+                f'may not be encrypted.')
         super().__init_subclass__()
 
     def __post_init__(self: S) -> S:
@@ -110,7 +110,7 @@ class Storable(Generic[S]):
 
     async def save(self: S):
         if not self.is_ready():
-            raise nacl.exceptions.CryptoError('Encryption Key not yet provided.')
+            raise MissingEncryptionKey(self.__class__)
 
         encrypted = {}
         unique_chars: int = len(str(len(self.encrypt_attrs)))
@@ -120,8 +120,8 @@ class Storable(Generic[S]):
             nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
 
             raw_value: str = getattr(self, attr)
-            bytes_value: bytes = raw_value.encode()
-            encrypted_value: bytes = self.box.encrypt(bytes_value, nonce).ciphertext
+            bytes_value = raw_value.encode()
+            encrypted_value = self.box.encrypt(bytes_value, nonce).ciphertext
             encrypted[attr] = encrypted_value.hex()
 
         await save_data(self.update(update_inplace=False, **encrypted))
@@ -130,7 +130,7 @@ class Storable(Generic[S]):
         work_on: S = self if decrypt_inplace else self.copy()
 
         if not work_on.is_ready():
-            raise nacl.exceptions.CryptoError('Decryption Key not yet provided.')
+            raise MissingEncryptionKey(self.__class__)
 
         unique_chars: int = len(str(len(work_on.encrypt_attrs)))
         primary_value = f'{getattr(work_on, work_on.primary_key_name)}'
@@ -140,14 +140,15 @@ class Storable(Generic[S]):
 
             hex_value: str = getattr(work_on, attr)
             bytes_value = bytes.fromhex(hex_value)
-            decrypted_value: bytes = work_on.box.decrypt(bytes_value, nonce)
+            decrypted_value = work_on.box.decrypt(bytes_value, nonce)
             # decrypted[attr]: str = decrypted_value.decode()
             setattr(work_on, attr, decrypted_value.decode())
 
         return work_on
 
     @classmethod
-    async def load(cls: type[S], primary_key, decrypt: bool = True) -> S | None:
+    async def load(cls: type[S], primary_key, decrypt: bool = True) \
+            -> S | None:
         where = f'{cls.primary_key_name} = {primary_key}'
         try:
             obj = await anext(cls.load_gen(where=where, decrypt=decrypt))
@@ -161,7 +162,8 @@ class Storable(Generic[S]):
         return await load_data_all(cls, decrypt=decrypt, **where)
 
     @classmethod
-    def load_gen(cls: type[S], decrypt: bool = True, **where) -> AsyncGenerator[S, None]:
+    def load_gen(cls: type[S], decrypt: bool = True, **where) \
+            -> AsyncGenerator[S, None]:
         return load_data_gen(cls, decrypt=decrypt, **where)
 
     @classmethod
@@ -186,6 +188,15 @@ class Storable(Generic[S]):
     @classmethod
     def clear_key(cls):
         cls.box = None
+
+
+class MissingEncryptionKey(RuntimeError):
+    def __init__(self, type_: type[Storable] | Storable, *args):
+        type_ = type_.__class__ if isinstance(type_, Storable) else type_
+        if len(args) == 0:
+            args = (f'Missing encryption key for {type_}',)
+        super().__init__(*args)
+        self.storable: Storable = type_
 
 
 async def does_table_exist(table_name) -> bool:
@@ -323,4 +334,5 @@ async def load_data_gen(data_type: type[S], decrypt: bool = True, **where) \
             async for row in cursor:
                 if decrypt:
                     yield data_type(*row).decrypt()
-                yield data_type(*row)
+                else:
+                    yield data_type(*row)
