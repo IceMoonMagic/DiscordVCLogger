@@ -1,7 +1,7 @@
 import re
 from asyncio import create_task
 from datetime import datetime
-from typing import Coroutine
+from typing import Any, Coroutine
 
 import discord
 import discord.ext.commands as cmd
@@ -269,3 +269,17 @@ class UnlockModal(discord.ui.Modal):
                 embed=make_error(
                     f'Failed to unlock {self.unlock_type.__name__}',
                     f'{type(e).__name__}: {e}'))
+
+
+async def send_dm(user_id: int, bot: cmd.Bot, *msg_args, **msg_kwargs):
+    dm = await get_dm(user_id, bot)
+    await dm.send(*msg_args, **msg_kwargs)
+
+
+async def do_and_dm(user_id: int, bot: cmd.Bot,
+                    coro: Coroutine[Any, Any, discord.Embed],
+                    send: bool = True) -> discord.Embed:
+    embed = await coro
+    if send:
+        await send_dm(user_id, bot, embed=embed)
+    return embed

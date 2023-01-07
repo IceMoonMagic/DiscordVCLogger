@@ -65,7 +65,8 @@ class HoyoLabData(db.Storable):
 
 class CookieModal(discord.ui.Modal):
 
-    def __init__(self, *children: discord.ui.InputText, title: str, bot: cmd.Bot):
+    def __init__(self, *children: discord.ui.InputText,
+                 title: str, bot: cmd.Bot):
         super().__init__(*children, title=title)
         self.bot = bot
         self.add_item(discord.ui.InputText(
@@ -109,10 +110,7 @@ class HoyoLab(cmd.Cog):
     def __init__(self, bot: cmd.Bot):
         self.bot = bot
 
-    CHECKIN_ICON = db.get_json_data()['check-in icon']
-
-    genshin_cmds = discord.SlashCommandGroup(
-        "genshin", "foo", guild_ids=(db.get_json_data()['genshin_guilds']))
+    genshin_cmds = discord.SlashCommandGroup("genshin", "foo")
 
     daily_rewards_cmds = genshin_cmds.create_subgroup(
         'daily', 'Relating to HoyoLab Daily Check-In')
@@ -129,7 +127,8 @@ class HoyoLab(cmd.Cog):
                 dm = await system.get_dm(user_id, self.bot)
                 await dm.send(embed=system.make_embed(
                     'Unlock HoyoLabData',
-                    'The bot is ready, but HoyoLabData still can\'t be encrypted/decrypted.'))
+                    'The bot is ready, but HoyoLabData '
+                    'still can\'t be encrypted/decrypted.'))
 
     @daily_rewards_cmds.command()
     @system.autogenerate_options
@@ -180,7 +179,7 @@ class HoyoLab(cmd.Cog):
         if not (client := await _get_client(ctx.author.id)):
             await ctx.respond(embed=client)
             return
-        if not (embed := await _redeem_code(client, code, ctx)) and \
+        if not (embed := await _redeem_code(client, code)) and \
                 'claimed' not in embed.description:
             await ctx.respond(embed=system.make_embed(
                 'Code Share Aborted',
@@ -189,26 +188,29 @@ class HoyoLab(cmd.Cog):
                 embed=embed))
             return
 
-        async def _with_notif(client_, user_id):
-            embed_ = await _redeem_code(client_, user_id)
-            dm = await system.get_dm(user_id, ctx.bot)
-            if 'claimed' not in embed_.description:
-                await dm.send(embed=embed_)
-
+        elif (await HoyoLabData.load(ctx.author.id)).notif_codes:
+            tasks = [asyncio.create_task(
+                system.send_dm(ctx.author.id, ctx.bot, embed=embed))]
+        else:
+            tasks = []  # Python 3.11: ToDo: asyncio.TaskGroup
         async for person in HoyoLabData.load_gen(auto_codes=True):
             if person.snowflake == ctx.author.id:
                 continue
 
             client = _make_client(person)
-            if person.notif_codes:
-                asyncio.create_task(_with_notif(client, person.snowflake))
-            else:
-                asyncio.create_task(_redeem_code(client, code))
+            tasks.append(asyncio.create_task(system.do_and_dm(
+                user_id=person.snowflake,
+                bot=ctx.bot,
+                coro=_redeem_code(client, code),
+                send=person.notif_codes)))
 
         await ctx.respond(embed=system.make_embed(
             'Sharing Code',
             f'`{code}` has been shared.',
             ctx))
+
+        for task in tasks:
+            await task
 
     @configure_cmds.command()
     @system.autogenerate_options
@@ -276,13 +278,18 @@ class HoyoLab(cmd.Cog):
     @genshin_cmds.command()
     async def lock(self, ctx: discord.ApplicationContext):
         HoyoLabData.clear_key()
-        await ctx.respond(embed=system.make_embed('HoyoLabData Locked', ctx=ctx), ephemeral=True)
+        await ctx.respond(
+            embed=system.make_embed('HoyoLabData Locked', ctx=ctx),
+            ephemeral=True)
 
     @cmd.is_owner()
     @daily_rewards_cmds.command()
     async def induce_auto_redeem(self, ctx: discord.ApplicationContext):
         await ctx.respond('Triggering `auto_redeem-daily`.')
         await auto_redeem_daily(ctx.bot)
+
+
+CHECKIN_ICON = db.get_json_data()['check-in icon']
 
 
 def _make_client(data: HoyoLabData) -> genshin.Client:
@@ -312,13 +319,17 @@ async def _redeem_daily(
             f'{reward.amount}x {reward.name}', ctx)
         embed.set_thumbnail(url=reward.icon)
         embed.set_author(name='HoyoLab Daily Check-In',
-                         icon_url=r'https://act.hoyolab.com/ys/event/signin-sea-v3/images/paimon.792472e0.png')
+                         icon_url=CHECKIN_ICON)
         return embed
     except genshin.AlreadyClaimed:
         return system.make_error(
             'Daily Rewards Already Claimed',
             'Failed to claim daily rewards as '
             'they have already been claimed.')
+    except genshin.InvalidCookies:
+        return system.make_error(
+            'Invalid Cookies',
+            'Failed to claim daily rewards as saved cookies are invalid')
 
 
 # @loop(time=dt.time(0, 5, 5, tzinfo=dt.timezone(dt.timedelta(hours=8))))
@@ -326,22 +337,20 @@ async def _redeem_daily(
 async def auto_redeem_daily(bot: cmd.Bot):
     logger.info('Automatically claiming daily rewards.')
 
-    async def _with_notif(client_, user_id):
-        embed = await _redeem_daily(client_)
-        dm = await system.get_dm(user_id, bot)
-        await dm.send(embed=embed)
-
+    tasks = []  # Python 3.11: ToDo: asyncio.TaskGroup
     async for person in HoyoLabData.load_gen(auto_daily=True):
         client = _make_client(person)
-        if person.notif_daily:
-            asyncio.create_task(_with_notif(client, person.snowflake))
-        else:
-            asyncio.create_task(_redeem_daily(client))
+        tasks.append(asyncio.create_task(system.do_and_dm(
+            user_id=person.snowflake,
+            bot=bot,
+            coro=_redeem_daily(client),
+            send=person.notif_daily)))
+    for task in tasks:
+        await task
 
 
 async def _redeem_code(
-        client: genshin.Client, code: str,
-        ctx: discord.ApplicationContext = None, tries: int = 0) \
+        client: genshin.Client, code: str, tries: int = 0) \
         -> discord.Embed | system.ErrorEmbed:
     try:
         await client.redeem_code(code)
@@ -358,8 +367,8 @@ async def _redeem_code(
             f'Code `{code}` claimed already.')
     except genshin.RedemptionCooldown:
         if tries < 3:
-            await asyncio.sleep(1)
-            return await _redeem_code(client, code, ctx, tries + 1)
+            await asyncio.sleep(tries + 1)
+            return await _redeem_code(client, code, tries + 1)
         return system.make_error(
             'Failed to Redeem Code',
             f'Redemption on cooldown.\nCode: `{code}`')
