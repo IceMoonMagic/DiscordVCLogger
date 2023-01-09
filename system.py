@@ -181,19 +181,20 @@ def make_embed(title: str = None, desc: str = None,
         title = embed.title if title is None else title
         desc = embed.description if desc is None else desc
         color = embed.color if ctx is None and color is None else color
-    else:
-        title = 'Generic Title' if title is None else title
-        desc = 'Generic Description' if desc is None else desc
+
+    if title:
+        kwargs.update({'title': title})
+    if desc:
+        kwargs.update({'description': desc})
 
     if color:
-        apply_color = color
+        kwargs.update({'color': color})
     elif ctx:
-        apply_color = ctx.me.color
+        kwargs.update({'color': ctx.me.color})
     else:
-        apply_color = discord.Color.blurple()
+        kwargs.update({'color': discord.Color.blurple()})
 
-    return discord.Embed(title=title, description=desc,
-                         color=apply_color, **kwargs)
+    return discord.Embed(**kwargs)
 
 
 class ErrorEmbed(discord.Embed):
