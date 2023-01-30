@@ -68,6 +68,20 @@ class System(cmd.Cog):
             title='Shutting Down'))
         await self.bot.close()
 
+    @system_cmds.command(name='ip')
+    async def get_ip(self, ctx: discord.ApplicationContext):
+        """Gets the *local* IP address of the host machine"""
+        logger.info('Getting IP Address')
+
+        await ctx.defer(ephemeral=True)
+
+        import socket
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        await ctx.respond(
+            embed=make_embed(f'Local IP Address', ip, ctx=ctx),
+            ephemeral=True)
+
     @cmd.Cog.listener()
     async def on_ready(self):
         """Final Setup after Bot is fully connected to Discord"""
