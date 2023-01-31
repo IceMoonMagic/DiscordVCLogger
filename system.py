@@ -1,7 +1,7 @@
 import re
 from asyncio import create_task
 from datetime import datetime
-from typing import Any, Coroutine
+from typing import Any, Coroutine, Callable
 
 import discord
 import discord.ext.commands as cmd
@@ -51,6 +51,7 @@ class System(cmd.Cog):
 
     system_cmds = discord.SlashCommandGroup('system')
 
+    @cmd.is_owner()
     @system_cmds.command(name='shutdown')
     async def shutdown_command(self, ctx: discord.ApplicationContext):
         """Does necessary actions to end execution of the bot."""
@@ -68,6 +69,7 @@ class System(cmd.Cog):
             title='Shutting Down'))
         await self.bot.close()
 
+    @cmd.is_owner()
     @system_cmds.command(name='ip')
     async def get_ip(self, ctx: discord.ApplicationContext):
         """Gets the *local* IP address of the host machine"""
@@ -135,7 +137,7 @@ class System(cmd.Cog):
                 title = 'Not Owner'
                 desc = f'Only bot owners can use this command.'
 
-            case cmd.CheckFailure():
+            case cmd.CheckFailure() | discord.errors.CheckFailure():
                 title = 'Check Error'
                 desc = 'There is some condition that is not being met.'
 
