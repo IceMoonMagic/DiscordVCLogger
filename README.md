@@ -2,28 +2,28 @@
 Everything related to my personal discord bot.
 
 ## Table of Contents
-1. [Setup](#setup)
-   1. [Requirements](#requirements)
-   2. [Preparations](#preparations)
-   3. [Running](#running)
-2. [Extensions](#extensions)
-   1. [VC Log](#vc-log)
-   2. [HoyoLab](#hoyolab)
-3. [(Lack of) Contributions](#contributions)
-4. [Licence](#license)
+* [Setup](#setup)
+    * [Requirements](#requirements)
+    * [Preparations](#preparations)
+    * [Running](#running)
+* [Extensions](#extensions)
+    * [VC Log](#vc-log)
+    * [HoyoLab](#hoyolab)
+* [(Lack of) Contributions](#contributions)
+* [Licence](#license)
 
 ## Setup
 ### Requirements
-- `Python 3.10`
-- `py-cord`: Discord API Library
-- `aiosqlite`: Async SQLite
-- `pynacl`: Encryption Library
-- `genshin`: Interactions with [HoyoLab](https://www.hoyolab.com/)
+- [`Python 3.10`](https://www.python.org/)
+- [`py-cord`](https://pypi.org/project/py-cord/): Discord API Library
+- [`aiosqlite`](https://pypi.org/project/aiosqlite/): Async SQLite
+- [`pynacl`](https://pypi.org/project/aiosqlite/): Encryption Library
+- [`genshin`](https://pypi.org/project/genshin/): Interactions with [HoyoLab](https://www.hoyolab.com/)
 
 ### Preparations
 1. Install a Python version of at least `3.10`
 2. Install requirements
-    `python -m pip install -r requirements.txt`
+   `python -m pip install -r requirements.txt`
 3. Make `saves/bot_key.json` following the template of `bot_key_template.json`.
     - Set the `"key"` to your discord bot key.
     - Set the `"owners"` to your discord id(s).
@@ -46,16 +46,16 @@ The following extensions require a key:
 - `HoyoLab`: Unlocked with `/genshin unlock` and submitting a key to the modal.
 
 ## Extensions
-### VC Log 
+### VC Log
 **(WIP / Out of Order)**
 
-Records voice state updates in discord. 
+Records voice state updates in discord.
 This was started to help find out who just joined / left a voice channel or how long ago that was.
 
 ### HoyoLab
 Allows automatically redeeming [HoyoLab Daily Check-In](https://genshin-impact.fandom.com/wiki/HoYoLAB_Community_Daily_Check-In) and redeeming [Genshin Gift Codes](https://genshin.hoyoverse.com/en/gift).
 
-Users can register their cookies using the `/genshin config cookeis`. 
+Users can register their cookies using the `/genshin config cookeis`.
 This will present them with a modal that for them to insert their `account_id` and `cookie_token` from [HoyoLab](https://www.hoyolab.com/).
 The other necessary cookies are automatically created.
 the cookies are encrypted before being stored.
