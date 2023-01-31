@@ -247,7 +247,7 @@ class HoyoLab(cmd.Cog):
         Configure settings for interactions with HoyoLab.
 
         :param ctx: Application context from Discord.
-        :param bool auto_daily: Allow the bot to automatically redeem your
+        :param auto_daily: Allow the bot to automatically redeem your
         HoyoLab daily check-in.
         :param auto_codes: Allow the bot to redeem codes others share with the
         share_codes command.
