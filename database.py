@@ -3,9 +3,11 @@ import datetime as dt
 import json
 import logging
 import sys
+import tempfile
 import time
+from collections.abc import Iterable
 from logging.handlers import RotatingFileHandler
-from typing import AsyncGenerator, Generic, Iterable, TypeVar
+from typing import AsyncGenerator, TypeVar
 
 import aiosqlite as sql
 import nacl.secret
@@ -62,6 +64,7 @@ LOG_NAME = 'discord_bot'
 logger = get_logger(__name__)
 
 DB_FILE = r'saves/database.db'
+TEMP_FILE = None
 SQL_CAST = {bool: 'bool', int: 'int', str: 'nvarchar'}
 
 S = TypeVar("S", bound='Storable')
@@ -70,6 +73,7 @@ S = TypeVar("S", bound='Storable')
 class Storable:
     table_name = 'Storable'
     primary_key_name = 'table_name'
+    temp: bool = False
 
     encrypt_attrs: list = []
     box: nacl.secret.SecretBox | None = None
@@ -199,15 +203,32 @@ class MissingEncryptionKey(RuntimeError):
         self.storable: Storable = type_
 
 
-async def does_table_exist(table_name) -> bool:
+async def does_table_exist(table_name, temp: bool) -> bool:
     # ToDo: LBYL instead of EAFP
-    async with sql.connect(DB_FILE) as db:
+    file = DB_FILE if not temp else get_temp_file()
+    async with sql.connect(file) as db:
         try:
             await db.execute(f'SELECT * FROM {table_name}')
             return True
         except sql.OperationalError as e:
             logger.debug(e)
             return False
+
+
+def get_temp_file():
+    global TEMP_FILE
+    if TEMP_FILE:
+        return TEMP_FILE
+    fd, TEMP_FILE = tempfile.mkstemp(prefix=sys.argv[0][:-3], suffix='.db')
+    return TEMP_FILE
+
+
+def delete_temp_file():
+    global TEMP_FILE
+    if isinstance(TEMP_FILE, str):
+        import os
+        os.remove(TEMP_FILE)
+        TEMP_FILE = None
 
 
 async def make_table(blueprint: Storable):
@@ -219,7 +240,7 @@ async def make_table(blueprint: Storable):
 
 
 async def make_table_if_not_exist(blueprint: Storable):
-    if not await does_table_exist(blueprint.table_name):
+    if not await does_table_exist(blueprint.table_name, blueprint.temp):
         await make_table(blueprint)
 
 
@@ -231,7 +252,7 @@ async def _write_db(command: str):
 
 
 async def delete(data_type: type[S], **where):
-    if not await does_table_exist(data_type.table_name):
+    if not await does_table_exist(data_type.table_name, data_type.temp):
         return
 
     command = f'DELETE FROM {data_type.table_name} ' \
@@ -302,13 +323,18 @@ def _generate_where(**where) -> str:
 
     command = 'WHERE '
     for attr, val in where.items():
-        command += f'{attr}={val} AND '
-    return command[:-5]
+        if attr.startswith('not_'):
+            command += 'NOT '
+        if isinstance(val, Iterable) and not isinstance(val, str):
+            command += f'{attr} IN {tuple(val)} AND '
+        else:
+            command += f'{attr}={val} AND '
+    return command[:-5].replace(',)', ')')
 
 
 async def load_data_all(data_type: type[S], decrypt: bool = True, **where) \
         -> list[S]:
-    if not await does_table_exist(data_type.table_name):
+    if not await does_table_exist(data_type.table_name, data_type.temp):
         return []
 
     command = f'SELECT * FROM {data_type.table_name} ' \
@@ -323,7 +349,7 @@ async def load_data_all(data_type: type[S], decrypt: bool = True, **where) \
 
 async def load_data_gen(data_type: type[S], decrypt: bool = True, **where) \
         -> AsyncGenerator[S, None]:
-    if not await does_table_exist(data_type.table_name):
+    if not await does_table_exist(data_type.table_name, data_type.temp):
         return
 
     command = f'SELECT * FROM {data_type.table_name} ' \

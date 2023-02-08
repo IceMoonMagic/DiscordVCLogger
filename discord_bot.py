@@ -34,6 +34,7 @@ def main():
     bot.load_extensions('system', 'extensions.hoyolab')
 
     bot.run(key)
+    db.delete_temp_file()
     logger.info('Shutdown Complete, End of Process')
 
 
