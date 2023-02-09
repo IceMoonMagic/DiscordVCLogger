@@ -209,8 +209,7 @@ class MissingEncryptionKey(RuntimeError):
 
 async def does_table_exist(table_name, temp: bool) -> bool:
     # ToDo: LBYL instead of EAFP
-    file = DB_FILE if not temp else get_temp_file()
-    async with sql.connect(file) as db:
+    async with sql.connect(get_db_file(temp)) as db:
         try:
             await db.execute(f'SELECT * FROM {table_name}')
             return True
@@ -219,7 +218,7 @@ async def does_table_exist(table_name, temp: bool) -> bool:
             return False
 
 
-def get_temp_file():
+def get_temp_file() -> str:
     global TEMP_FILE
     if TEMP_FILE:
         return TEMP_FILE
@@ -227,7 +226,13 @@ def get_temp_file():
     return TEMP_FILE
 
 
+def get_db_file(temp: bool) -> str:
+    if temp:
+        return get_temp_file()
+    return DB_FILE
+
 def delete_temp_file():
+    # ToDo: Temp file if program is unnaturally canceled
     global TEMP_FILE
     if isinstance(TEMP_FILE, str):
         import os
@@ -240,7 +245,7 @@ async def make_table(blueprint: Storable):
     for var, var_type in blueprint.__annotations__.items():
         command += f'{var} {SQL_CAST[var_type]}, '
     command += f'PRIMARY KEY ({blueprint.primary_key_name}) );'
-    await _write_db(command)
+    await _write_db(command, blueprint.temp)
 
 
 async def make_table_if_not_exist(blueprint: Storable):
@@ -248,9 +253,9 @@ async def make_table_if_not_exist(blueprint: Storable):
         await make_table(blueprint)
 
 
-async def _write_db(command: str):
+async def _write_db(command: str, temp_db: bool):
     logger.debug(command)
-    async with sql.connect(DB_FILE) as db:
+    async with sql.connect(get_db_file(temp_db)) as db:
         await db.execute(command)
         await db.commit()
 
@@ -261,7 +266,7 @@ async def delete(data_type: type[S], **where):
 
     command = f'DELETE FROM {data_type.table_name} ' \
               f'{_generate_where(**where)}'
-    await _write_db(command)
+    await _write_db(command, data_type.temp)
 
 
 async def _update_row(data: Storable):
@@ -281,7 +286,7 @@ async def _update_row(data: Storable):
 
     command = f'{command[:-2]} WHERE {data.primary_key_name} = ' \
               f'{getattr(data, data.primary_key_name)}'
-    await _write_db(command)
+    await _write_db(command, data.temp)
 
 
 async def _insert_row(data: Storable):
@@ -297,7 +302,7 @@ async def _insert_row(data: Storable):
             values += f'{val}, '
     command = f'{header[:-2]}) {values[:-2]});'
 
-    await _write_db(command)
+    await _write_db(command, data.temp)
 
 
 async def save_data(data: Storable):
@@ -344,7 +349,7 @@ async def load_data_all(data_type: type[S], decrypt: bool = True, **where) \
     command = f'SELECT * FROM {data_type.table_name} ' \
               f'{_generate_where(**where)}'
     logger.debug(command)
-    async with sql.connect(DB_FILE) as db:
+    async with sql.connect(get_db_file(data_type.temp)) as db:
         results = await db.execute_fetchall(command)
     if decrypt:
         return [data_type(*row).decrypt() for row in results]
@@ -359,7 +364,7 @@ async def load_data_gen(data_type: type[S], decrypt: bool = True, **where) \
     command = f'SELECT * FROM {data_type.table_name} ' \
               f'{_generate_where(**where)}'
     logger.debug(command)
-    async with sql.connect(DB_FILE) as db:
+    async with sql.connect(get_db_file(data_type.temp)) as db:
         async with db.execute(command) as cursor:
             async for row in cursor:
                 if decrypt:
