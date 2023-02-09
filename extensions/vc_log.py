@@ -209,6 +209,7 @@ async def _log_changes(
         member_id: int,
         old_state: discord.VoiceState,
         new_state: discord.VoiceState):
+    time = datetime.now(tz=timezone.utc)
     for change in VoiceStateChange.find_changes(old_state, new_state):
         if change == VoiceStateChange.channel_leave:
             if len(old_state.channel.voice_states) == 0:
@@ -222,7 +223,8 @@ async def _log_changes(
             guild_id=guild_id,
             channel_id=channel_id,
             user_id=member_id,
-            change_name=change.name).save()
+            change_name=change.name,
+            time=time).save()
 
 
 async def _log_reconciliation(bot: discord.Bot):
@@ -249,7 +251,7 @@ async def _log_reconciliation(bot: discord.Bot):
 
             # ToDo: Get current estimated state
             # channel_events = await VoiceStateChangeLog.load_all(
-            #     cahnnel_id=voice_channel.id)
+            #     channel_id=voice_channel.id)
             # member_events: dict[int, list[VoiceStateChange]] = {}
             #
             # for event in channel_events:
