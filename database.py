@@ -65,7 +65,7 @@ logger = get_logger(__name__)
 
 DB_FILE = r'saves/database.db'
 TEMP_FILE = None
-SQL_CAST = {bool: 'bool', int: 'int', str: 'nvarchar'}
+SQL_CAST = {bool: 'bool', int: 'int', str: 'nvarchar', dt.datetime: 'datetime'}
 
 S = TypeVar("S", bound='Storable')
 
@@ -95,7 +95,11 @@ class Storable:
     def __post_init__(self: S) -> S:
         for attr, type_ in self.__annotations__.items():
             if not isinstance(value := getattr(self, attr), type_):
-                setattr(self, attr, type_(value))
+                if type_ == dt.datetime:
+                    object.__setattr__(
+                        self, attr, dt.datetime.fromisoformat(value))
+                else:
+                    object.__setattr__(self, attr, type_(value))
         return self
 
     def copy(self: S) -> S:
@@ -287,7 +291,7 @@ async def _insert_row(data: Storable):
     values = 'VALUES ('
     for attribute in data.__annotations__:
         header += f'{attribute}, '
-        if isinstance(val := getattr(data, attribute), str):
+        if isinstance(val := getattr(data, attribute), (str, dt.datetime)):
             values += f'"{val}", '
         else:
             values += f'{val}, '
