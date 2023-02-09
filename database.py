@@ -20,11 +20,11 @@ def setup_logging(to_stdout: bool = True,
 
     now = dt.datetime.utcnow().astimezone(dt.timezone.utc)
     error_handler = RotatingFileHandler(
-        f'logs/{now.strftime("%Y-%m-%dT%H%M+00")}.log',
+        f'logs/{now.strftime(LOG_NAME + "_notable")}.log',
         maxBytes=524288,
         backupCount=3)
     file_handler = RotatingFileHandler(
-        f'logs/{now.strftime(LOG_NAME)}.log',
+        f'logs/{now.strftime(LOG_NAME + "_standard")}.log',
         maxBytes=524288,
         backupCount=3)
     console_handler = logging.StreamHandler(sys.stdout)
