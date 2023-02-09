@@ -59,7 +59,7 @@ class VoiceStateChange(enum.Enum):
             cls: 'VoiceStateChange',
             old_state: discord.VoiceState,
             new_state: discord.VoiceState,
-            simplify: bool = True) \
+            simplify: bool = False) \
             -> list['VoiceStateChange']:
         """
         Find all the differences between two discord voice states.
@@ -276,7 +276,9 @@ async def _vc_log_embed(
         only_present: bool | None = True,
         channel: discord.VoiceChannel | None = None,
         time_format: str = 'R',
-        ignore_empty: bool = True) \
+        ignore_empty: bool = True,
+        remove_dupes: bool = True,
+        remove_undo: bool = True) \
         -> discord.Embed:
     """Creates an embed with for the VC Log"""
     if isinstance(channel, VOICE_STATE_CHANNELS):
@@ -310,18 +312,22 @@ async def _vc_log_embed(
 
     if amount == -1:
         amount = len(events)
-    iterator = (e for i, e in zip(range(amount), events))
+    iterator = (e for i, e in zip(range(amount), reversed(events)))
 
     fields = {}
-    # ToDo: Allow filtering undo/redo
     for event in iterator:
-        line = f'- <@{event.user_id}> '\
-               f'{system.get_time_str(event.time, time_format)}\n'
         existing = fields.get(event.change_name, '')
-        if len(existing + line) >= 1023:
+        mention = f'<@{event.user_id}>'
+        if (remove_dupes and mention in existing) or \
+                (remove_undo and mention in
+                 fields.get(event.change.opposite.name, '')):
+            continue
+        time_str = system.get_time_str(event.time, time_format)
+        line = f'- {mention} {time_str}\n'
+        if len(existing + line) > 1023:
             fields[event.change_name] = existing + '+'
         else:
-            fields[event.change_name] = fields.get(event.change_name, '') + line
+            fields[event.change_name] = existing + line
 
     embed = system.make_embed(
         title=f'Voice Event history in `{vc.name}`:', ctx=ctx)
@@ -330,8 +336,9 @@ async def _vc_log_embed(
             continue
         # ToDo: Inline with opposite
         embed.add_field(
-            name=' '.join([s.capitalize() for s in field.split('_')]) + 's',
+            name=field.replace('_', ' ').title() + 's',
             value=fields.get(field, '- None'),
             inline=False)
+    if len(embed.fields) == 0:
+        embed.description = 'No logs present.'
     return embed
-
