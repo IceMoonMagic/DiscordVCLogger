@@ -31,7 +31,11 @@ def main():
     key = bot_info['key']
     del bot_info
 
-    bot.load_extensions('system', 'extensions.hoyolab', 'extensions.vc_log')
+    bot.load_extensions(
+        'system',
+        'extensions.hoyolab',
+        'extensions.vc_log',
+    )
 
     bot.run(key)
     db.delete_temp_file()
