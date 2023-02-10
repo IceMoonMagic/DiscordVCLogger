@@ -174,7 +174,8 @@ class VcLog(cmds.Cog):
             vsc_types=[VoiceStateChange.channel_join],
             amount=amount,
             channel=channel,
-            ignore_empty=False))
+            ignore_empty=False,
+            only_present=True))
 
     @log_command_group.command()
     async def left(self, ctx: discord.ApplicationContext, *,
@@ -188,7 +189,8 @@ class VcLog(cmds.Cog):
             vsc_types=[VoiceStateChange.channel_leave],
             amount=amount,
             channel=channel,
-            ignore_empty=False))
+            ignore_empty=False,
+            only_present=None))
 
     @log_command_group.command()
     async def all(self, ctx: discord.ApplicationContext, *,
@@ -199,7 +201,8 @@ class VcLog(cmds.Cog):
             ctx=ctx,
             amount=amount,
             channel=channel,
-            ignore_empty=ignore_empty))
+            ignore_empty=ignore_empty,
+            only_present=False))
 
     # ToDo: Filtered logs
 
