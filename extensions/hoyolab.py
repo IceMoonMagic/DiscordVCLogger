@@ -388,6 +388,15 @@ async def _check(user_id: int,
         return system.make_error(
             'Invalid Cookie Data',
             'Unable to login to HoyoLab with your cookies.')
+    except Exception as e:
+        if "await genshin.utility.update_characters_enka()" not in str(e):
+            raise
+        return system.make_embed(
+            'Account Successfully Connected',
+            'Account detail fetch failed due to weird bug that only appears '
+            'when running my Raspberry Pi.',
+            ctx=ctx,
+            color=color)
 
     embed = system.make_embed(
         'Account Successfully Connected', '', ctx=ctx, color=color)
