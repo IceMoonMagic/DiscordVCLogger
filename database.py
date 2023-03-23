@@ -334,6 +334,7 @@ def _generate_where(**where) -> str:
     for attr, val in where.items():
         if attr.startswith('not_'):
             command += 'NOT '
+            attr = attr[4:]
         if isinstance(val, Iterable) and not isinstance(val, str):
             command += f'{attr} IN {tuple(val)} AND '
         else:
