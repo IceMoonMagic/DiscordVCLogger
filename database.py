@@ -18,12 +18,19 @@ def setup_logging(to_stdout: bool = True,
                   root_level: int = logging.WARNING):
     logging.Formatter.converter = time.gmtime
 
+    root_logger = logging.getLogger()
+    local_logger = logging.getLogger(LOG_NAME)
+
     now = dt.datetime.utcnow().astimezone(dt.timezone.utc)
-    error_handler = RotatingFileHandler(
-        f'logs/{now.strftime(LOG_NAME + "_notable")}.log',
+    root_error_handler = RotatingFileHandler(
+        f'logs/{now.strftime(LOG_NAME + "_notable_root")}.log',
         maxBytes=524288,
         backupCount=3)
-    file_handler = RotatingFileHandler(
+    local_error_handler = RotatingFileHandler(
+        f'logs/{now.strftime(LOG_NAME + "_notable_local")}.log',
+        maxBytes=524288,
+        backupCount=3)
+    standard_log_handler = RotatingFileHandler(
         f'logs/{now.strftime(LOG_NAME + "_standard")}.log',
         maxBytes=524288,
         backupCount=3)
@@ -33,20 +40,22 @@ def setup_logging(to_stdout: bool = True,
         '{asctime}|{levelname}|{lineno}|{name}|{message}',
         '%Y-%m-%d %H:%M:%S', "{")
 
-    error_handler.setFormatter(formatter)
-    file_handler.setFormatter(formatter)
+    root_error_handler.setFormatter(formatter)
+    local_error_handler.setFormatter(formatter)
+    standard_log_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 
-    _logger = logging.getLogger(LOG_NAME)
-    _logger.setLevel(local_level)
+    root_error_handler.setLevel(logging.WARNING)
+    local_error_handler.setLevel(logging.WARNING)
 
-    _logger.addHandler(file_handler)
+    root_logger.setLevel(root_level)
+    local_logger.setLevel(local_level)
+
+    root_logger.addHandler(root_error_handler)
+    local_logger.addHandler(local_error_handler)
+    local_logger.addHandler(standard_log_handler)
     if to_stdout:
-        _logger.addHandler(console_handler)
-
-    error_handler.setLevel(logging.WARNING)
-    logging.getLogger().setLevel(root_level)
-    logging.getLogger().addHandler(error_handler)
+        local_logger.addHandler(console_handler)
 
 
 def get_logger(name) -> logging.Logger:
