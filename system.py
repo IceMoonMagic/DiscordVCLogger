@@ -230,6 +230,7 @@ def make_error(title: str = 'Error', desc: str = 'Generic Error', **kwargs) \
 def autogenerate_options(fn):
     if not fn.__doc__:
         return fn
+    none_type = type(None)
     docstring = re.sub(r'\s+', ' ', fn.__doc__).strip()
     params = docstring.split(':param ')[1:]
     for param in params:
@@ -242,8 +243,20 @@ def autogenerate_options(fn):
                 if anno.description == 'No description provided':
                     anno.description = docs
             case _:
-                fn.__annotations__[name] = discord.Option(
-                    anno, description=docs)
+                if hasattr(anno, '__args__') and \
+                        none_type in (anno := anno.__args__):
+                    anno = tuple(a for a in anno if a != none_type)
+                if fn.__kwdefaults__ is None or name not in fn.__kwdefaults__:
+                    option = discord.Option(
+                        input_type=anno,
+                        description=docs,
+                        required=True)
+                else:
+                    option = discord.Option(
+                        input_type=anno,
+                        description=docs,
+                        default=fn.__kwdefaults__.get(name))
+                fn.__annotations__[name] = option
     return fn
 
 
