@@ -39,6 +39,7 @@ class HoyoLabData(db.Storable):
     cookie_token: str
     ltuid: str
     ltoken: str
+    # ToDo: Implement for each `genshin.Game` (Genshin, Honkai3rd, Starrail)
     auto_daily: bool = True
     auto_codes: bool = True
     notif_daily: bool = True
@@ -120,6 +121,13 @@ class HoyoLab(cmd.Cog):
 
     configure_cmds = genshin_cmds.create_subgroup('config')
 
+    # ToDo: Verify game account exists
+    game_selection = discord.Option(genshin.Game, 'The game to run the command for.', choice=[
+        discord.OptionChoice('Genshin Impact', genshin.Game.GENSHIN),
+        discord.OptionChoice('Honkai Impact 3rd', genshin.Game.HONKAI),
+        # discord.OptionChoice('Honkai Star Rail', genshin.Game.STARRAIL),  # Not included in library releases yet
+    ])
+
     @cmd.Cog.listener('on_ready')
     async def unlock_reminder(self):
         if HoyoLabData.box is None:
@@ -132,51 +140,54 @@ class HoyoLab(cmd.Cog):
 
     @daily_rewards_cmds.command()
     @system.autogenerate_options
-    async def redeem_daily(self, ctx: discord.ApplicationContext):
+    async def redeem_daily(self, ctx: discord.ApplicationContext, game: game_selection):
         """
         Manually redeem your daily check-in.
 
         :param ctx: Application Context form Discord.
+        :param game: The game to run the command for.
         """
         await ctx.defer(ephemeral=True)
-        if not (client := await _get_client(ctx.author.id)):
+        if not (client := await _get_client(ctx.author.id, game=game)):
             await ctx.respond(embed=client)
 
         await ctx.respond(embed=await _redeem_daily(client))
 
     @redeem_codes_cmds.command()
     @system.autogenerate_options
-    async def redeem(self, ctx: discord.ApplicationContext, code: str):
+    async def redeem(self, ctx: discord.ApplicationContext, code: str, game: game_selection):
         """
         Redeem a code for yourself.
 
         :param ctx: Application Context form Discord.
         :param code: Code to redeem.
+        :param game: The game to run the command for.
         """
         await ctx.defer(ephemeral=True)
 
         code = code.strip().upper()
 
-        if not (client := await _get_client(ctx.author.id)):
+        if not (client := await _get_client(ctx.author.id, game=game)):
             await ctx.respond(embed=client)
             return
         await ctx.respond(embed=await _redeem_code(client, code))
 
     @redeem_codes_cmds.command()
     @system.autogenerate_options
-    async def share(self, ctx: discord.ApplicationContext, code: str):
+    async def share(self, ctx: discord.ApplicationContext, code: str, game: game_selection):
         """
         Redeem a code for everyone with `auto_codes` enabled.
 
         :param ctx: Application Context form Discord.
         :param code: Code to redeem.
+        :param game: The game to run the command for.
         """
 
         await ctx.defer()
 
         code = code.strip().upper()
 
-        if not (client := await _get_client(ctx.author.id)):
+        if not (client := await _get_client(ctx.author.id, game=game)):
             await ctx.respond(embed=client)
             return
         if not (embed := await _redeem_code(client, code)) and \
@@ -288,16 +299,20 @@ class HoyoLab(cmd.Cog):
 CHECKIN_ICON = db.get_json_data()['check-in icon']
 
 
-def _make_client(data: HoyoLabData) -> genshin.Client:
-    client = genshin.Client(game=genshin.Game.GENSHIN)
+def _make_client(
+        data: HoyoLabData,
+        game: genshin.Game = genshin.Game.GENSHIN) -> genshin.Client:
+    client = genshin.Client(game=game)
     client.set_cookies(data.cookies)
     return client
 
 
-async def _get_client(snowflake: int) -> \
+async def _get_client(
+        snowflake: int,
+        game: genshin.Game = genshin.Game.GENSHIN) -> \
         genshin.Client | system.ErrorEmbed:
     if isinstance(data := await HoyoLabData.load(snowflake), HoyoLabData):
-        return _make_client(data)
+        return _make_client(data, game)
     return system.make_error(
         'Failed to Retrieve User Data',
         'Please configure your information using '
