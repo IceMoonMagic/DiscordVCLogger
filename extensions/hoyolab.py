@@ -383,30 +383,22 @@ async def _check(user_id: int,
             'No Data Present',
             'Your HoyoLab cookies are not saved.')
     try:
-        check = await client.get_partial_genshin_user(client.uid)
+        check = await client.get_game_accounts()
     except genshin.CookieException:
         return system.make_error(
             'Invalid Cookie Data',
             'Unable to login to HoyoLab with your cookies.')
-    except Exception as e:
-        if "await genshin.utility.update_characters_enka()" not in str(e):
-            raise
-        return system.make_embed(
-            'Account Successfully Connected',
-            'Account detail fetch failed due to weird bug that only appears '
-            'when running my Raspberry Pi.',
-            ctx=ctx,
-            color=color)
 
     embed = system.make_embed(
         'Account Successfully Connected', '', ctx=ctx, color=color)
-    embed.add_field(
-        name='Connected Account',
-        value=f'- `{check.info.nickname}` on '
-              f'`{check.info.server.upper()}` servers.\n'
-              f'- Level/AR `{check.info.level}`, '
-              f'`{len(check.characters)}` Characters.\n',
-        inline=False)
+    for account in check:
+        values = ''
+        for k, v in dict(account).items():
+            values += f'{k.replace("_", " ").title()}: `{v}`\n'
+        embed.add_field(
+            name=account.game.name,
+            value=values.strip(),
+            inline=False)
 
     for name, value in (await HoyoLabData.load(user_id)).settings.items():
         for option in HoyoLab.settings.options:
