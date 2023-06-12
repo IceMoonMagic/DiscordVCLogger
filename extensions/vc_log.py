@@ -245,37 +245,22 @@ class VcLog(cmds.Cog):
 
     @log_command_group.command()
     @system.autogenerate_options
-    async def get(self, ctx: discord.ApplicationContext, *,
-                  channel: VOICE_STATE_CHANNELS | None = None,
+    async def get(self, ctx: discord.ApplicationContext,
+                  include: discord.Option(
+                      str, choices=VoiceStateChange.__members__),
+                  include_alt: bool = True, *,
+                  channel: VOICE_STATE_CHANNELS = None,
                   amount: int = -1, ignore_empty: bool = False,
                   remove_dupes: bool = True, remove_undo: bool = True,
                   only_present: bool = False,
-                  time_format: system.time_parameter('R'),
-                  server_deafen: bool = False,
-                  server_undeafen: bool = False,
-                  server_mute: bool = False,
-                  server_unmute: bool = False,
-                  self_deafen: bool = False,
-                  self_undeafen: bool = False,
-                  self_mute: bool = False,
-                  self_unmute: bool = False,
-                  start_stream: bool = False,
-                  end_stream: bool = False,
-                  start_video: bool = False,
-                  end_video: bool = False,
-                  suppressed: bool = False,
-                  unsuppressed: bool = False,
-                  speak_request_start: bool = False,
-                  speak_request_end: bool = False,
-                  enter_afk: bool = False,
-                  exit_afk: bool = False,
-                  channel_join: bool = False,
-                  channel_leave: bool = False,
+                  time_format: system.time_format_option = 'R',
                   ):
         """
         Get specified logs from a VC. Defaults to your VC.
 
         :param ctx: Application Context form Discord.
+        :param include: The VoiceStateChange type to display.
+        :param include_alt: Display the "opposite" VSC type.
         :param channel: Channel to get logs from.
         :param amount: Number of entries to show. -1 = all
         :param ignore_empty: Weather or not to hide empty categories.
@@ -285,33 +270,11 @@ class VcLog(cmds.Cog):
         :param remove_undo:
         Only show events that have been "undone" by a more recent event
         :param time_format: The time format to display the logs
-        :param server_deafen: Member Server Deafened
-        :param server_undeafen: Member Server Undeafened
-        :param server_mute: Member Server Muted
-        :param server_unmute: Member Server Unmuted
-        :param self_deafen: Member Self Deafened
-        :param self_undeafen: Member Self Undeafened
-        :param self_mute: Member Self Muted
-        :param self_unmute: Member Self Unmuted
-        :param start_stream: Member Started Streaming
-        :param end_stream: Member Stopped Streaming
-        :param start_video: Member Started Video
-        :param end_video: Member Ended Video
-        :param suppressed: Member Voice Suppressed
-        :param unsuppressed: Member Voice Unsuppressed
-        :param speak_request_start: Member Requested to Speak
-        :param speak_request_end: Member Removed Request to Speak
-        :param enter_afk: Member Became AFK
-        :param exit_afk: Member Became not AFK
-        :param channel_join: Member Joined Voice Channel
-        :param channel_leave: Member Left Voice Channel
         """
         await ctx.defer()
-        vsc_types = []
-        settings = locals()
-        for vsc in VoiceStateChange.__members__.values():
-            if settings[vsc.name]:
-                vsc_types.append(vsc)
+        vsc_types = [VoiceStateChange[include]]
+        if include_alt:
+            vsc_types.append(vsc_types[0].opposite)
 
         await ctx.respond(embed=await _vc_log_embed(
             ctx=ctx,
