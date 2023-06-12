@@ -122,11 +122,7 @@ class HoyoLab(cmd.Cog):
     configure_cmds = genshin_cmds.create_subgroup('config')
 
     # ToDo: Verify game account exists
-    game_selection = discord.Option(genshin.Game, 'The game to run the command for.', choice=[
-        discord.OptionChoice('Genshin Impact', genshin.Game.GENSHIN),
-        discord.OptionChoice('Honkai Impact 3rd', genshin.Game.HONKAI),
-        # discord.OptionChoice('Honkai Star Rail', genshin.Game.STARRAIL),  # Not included in library releases yet
-    ])
+    game_selection = discord.Option(genshin.Game, 'The game to run the command for.')
 
     @cmd.Cog.listener('on_ready')
     async def unlock_reminder(self):
@@ -350,12 +346,13 @@ async def auto_redeem_daily(bot: cmd.Bot):
 
     async with asyncio.TaskGroup() as tg:
         async for person in HoyoLabData.load_gen(auto_daily=True):
-            client = _make_client(person)
-            tg.create_task(system.do_and_dm(
-                user_id=person.snowflake,
-                bot=bot,
-                coro=_redeem_daily(client),
-                send=person.notif_daily))
+            for account in await _make_client(person).get_game_accounts():
+                client = _make_client(person, account.game)
+                tg.create_task(system.do_and_dm(
+                    user_id=person.snowflake,
+                    bot=bot,
+                    coro=_redeem_daily(client),
+                    send=person.notif_daily))
 
 
 async def _redeem_code(
