@@ -267,27 +267,15 @@ def get_time_str(time: datetime | int,
     return f'<t:{time}:{time_format}>'
 
 
-time_options = [
-        discord.OptionChoice('Short Time', 't'),
-        discord.OptionChoice('Long Time', 'T'),
-        discord.OptionChoice('Short Date', 'd'),
-        discord.OptionChoice('Long Date', 'D'),
-        discord.OptionChoice('Short Datetime', 'f'),
-        discord.OptionChoice('Long Datetime', 'F'),
-        discord.OptionChoice('Relative Time', 'R')
-]
-
-
-def time_parameter(default: str) -> discord.Option:
-    """
-    Make an Option that with the different time formats as options.
-
-    :param default: The default format. Makes required if None
-    :return: Option with the time_options as options
-    """
-    if default is None:
-        return discord.Option(str, choices=time_options, required=True)
-    return discord.Option(str, choices=time_options, default=default)
+time_format_option = discord.Option(str, default='R', choices=[
+    discord.OptionChoice('Short Time', 't'),
+    discord.OptionChoice('Long Time', 'T'),
+    discord.OptionChoice('Short Date', 'd'),
+    discord.OptionChoice('Long Date', 'D'),
+    discord.OptionChoice('Short Date/Time', 'f'),
+    discord.OptionChoice('Long Date/Time', 'F'),
+    discord.OptionChoice('Relative Time', 'R')
+])
 
 
 class UnlockModal(discord.ui.Modal):
