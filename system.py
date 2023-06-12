@@ -1,5 +1,5 @@
 import re
-from asyncio import create_task
+from asyncio import TaskGroup
 from datetime import datetime
 from typing import Any, Coroutine, Callable
 
@@ -59,11 +59,9 @@ class System(cmd.Cog):
 
         await ctx.defer()
 
-        tasks = []  # Python 3.11 ToDo: asyncio.TaskGroup
-        for coro in self.shutdown_coroutines:
-            tasks.append(create_task(coro))
-        for task in tasks:
-            await task
+        async with TaskGroup() as tg:
+            for coro in self.shutdown_coroutines:
+                tg.create_task(coro)
 
         await ctx.respond(embed=discord.Embed(
             title='Shutting Down'))

@@ -188,29 +188,25 @@ class HoyoLab(cmd.Cog):
                 embed=embed))
             return
 
-        elif (await HoyoLabData.load(ctx.author.id)).notif_codes:
-            tasks = [asyncio.create_task(
-                system.send_dm(ctx.author.id, ctx.bot, embed=embed))]
-        else:
-            tasks = []  # Python 3.11: ToDo: asyncio.TaskGroup
-        async for person in HoyoLabData.load_gen(auto_codes=True):
-            if person.snowflake == ctx.author.id:
-                continue
+        with asyncio.TaskGroup() as tg:
+            if (await HoyoLabData.load(ctx.author.id)).notif_codes:
+                tg.create_task(system.send_dm(ctx.author.id, ctx.bot, embed=embed))
 
-            client = _make_client(person)
-            tasks.append(asyncio.create_task(system.do_and_dm(
-                user_id=person.snowflake,
-                bot=ctx.bot,
-                coro=_redeem_code(client, code),
-                send=person.notif_codes)))
+            async for person in HoyoLabData.load_gen(auto_codes=True):
+                if person.snowflake == ctx.author.id:
+                    continue
 
-        await ctx.respond(embed=system.make_embed(
-            'Sharing Code',
-            f'`{code}` has been shared.',
-            ctx))
+                client = _make_client(person)
+                tg.create_task(system.do_and_dm(
+                    user_id=person.snowflake,
+                    bot=ctx.bot,
+                    coro=_redeem_code(client, code),
+                    send=person.notif_codes))
 
-        for task in tasks:
-            await task
+            tg.create_task(ctx.respond(embed=system.make_embed(
+                'Sharing Code',
+                f'`{code}` has been shared.',
+                ctx)))
 
     @configure_cmds.command()
     @system.autogenerate_options
@@ -337,16 +333,14 @@ async def _redeem_daily(
 async def auto_redeem_daily(bot: cmd.Bot):
     logger.info('Automatically claiming daily rewards.')
 
-    tasks = []  # Python 3.11: ToDo: asyncio.TaskGroup
-    async for person in HoyoLabData.load_gen(auto_daily=True):
-        client = _make_client(person)
-        tasks.append(asyncio.create_task(system.do_and_dm(
-            user_id=person.snowflake,
-            bot=bot,
-            coro=_redeem_daily(client),
-            send=person.notif_daily)))
-    for task in tasks:
-        await task
+    async with asyncio.TaskGroup() as tg:
+        async for person in HoyoLabData.load_gen(auto_daily=True):
+            client = _make_client(person)
+            tg.create_task(system.do_and_dm(
+                user_id=person.snowflake,
+                bot=bot,
+                coro=_redeem_daily(client),
+                send=person.notif_daily))
 
 
 async def _redeem_code(

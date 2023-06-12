@@ -325,11 +325,9 @@ async def save_data(data: Storable):
 
 
 async def save_datas(datas: Iterable[Storable]):
-    tasks = []  # Python 3.11 ToDo: asyncio.TaskGroup()
-    for data in datas:
-        tasks.append(asyncio.create_task(save_data(data)))
-    for task in tasks:
-        await task
+    async with asyncio.TaskGroup() as tg:
+        for data in datas:
+            tg.create_task(save_data(data))
 
 
 def _generate_where(**where) -> str:
