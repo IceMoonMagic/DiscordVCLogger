@@ -246,12 +246,12 @@ def autogenerate_options(fn):
                     anno = tuple(a for a in anno if a != none_type)
                 if fn.__kwdefaults__ is None or name not in fn.__kwdefaults__:
                     option = discord.Option(
-                        input_type=anno,
+                        anno,
                         description=docs,
                         required=True)
                 else:
                     option = discord.Option(
-                        input_type=anno,
+                        anno,
                         description=docs,
                         default=fn.__kwdefaults__.get(name))
                 fn.__annotations__[name] = option
