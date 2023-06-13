@@ -167,7 +167,7 @@ class VcLog(cmds.Cog):
     async def joined(self, ctx: discord.ApplicationContext = None, *,
                      channel: VOICE_STATE_CHANNELS | None = None,
                      amount: int = -1,
-                     time_format: system.time_parameter('R')):
+                     time_format: system.time_format_option = 'R'):
         # async def joined(self, ctx: discord.ApplicationContext):
         """
         Shows who has joined a VC and how long ago. Default to your VC.
@@ -192,7 +192,7 @@ class VcLog(cmds.Cog):
     async def left(self, ctx: discord.ApplicationContext, *,
                    channel: VOICE_STATE_CHANNELS | None = None,
                    amount: int = -1,
-                   time_format: system.time_parameter('R')):
+                   time_format: system.time_format_option = 'R'):
         # async def left(self, ctx: discord.ApplicationContext):
         """
         Shows who have left a VC and how long ago. Defaults to your VC.
@@ -218,7 +218,7 @@ class VcLog(cmds.Cog):
                   channel: VOICE_STATE_CHANNELS | None = None,
                   amount: int = -1, ignore_empty: bool = True,
                   remove_dupes: bool = True, remove_undo: bool = True,
-                  time_format: system.time_parameter('R')):
+                  time_format: system.time_format_option = 'R'):
         """
         Get all the logs from a VC. Defaults to your VC.
 
