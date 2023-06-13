@@ -386,12 +386,13 @@ async def _vc_log_embed(
         vc = channel
     elif isinstance(ctx.channel, VOICE_STATE_CHANNELS):
         vc = ctx.channel
-    elif isinstance(ctx.user.voice.channel, VOICE_STATE_CHANNELS):
+    elif ctx.user.voice is not None and \
+            isinstance(ctx.user.voice.channel, VOICE_STATE_CHANNELS):
         vc = ctx.user.voice.channel
     else:
         return system.make_error(
             title='Could not fetch VC Log',
-            description='You\'re not in a Voice Channel.')
+            desc='You\'re not in a Voice Channel.')
 
     voices = set(vc.voice_states)
     if only_present:
