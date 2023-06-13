@@ -14,14 +14,14 @@ Everything related to my personal discord bot.
 
 ## Setup
 ### Requirements
-- [`Python 3.10`](https://www.python.org/)
+- [`Python 3.11`](https://www.python.org/)
 - [`py-cord`](https://pypi.org/project/py-cord/): Discord API Library
 - [`aiosqlite`](https://pypi.org/project/aiosqlite/): Async SQLite
 - [`pynacl`](https://pypi.org/project/aiosqlite/): Encryption Library
 - [`genshin`](https://pypi.org/project/genshin/): Interactions with [HoyoLab](https://www.hoyolab.com/)
 
 ### Preparations
-1. Install a Python version of at least `3.10`
+1. Install a Python version of at least `3.11`
 2. Install requirements
    `python -m pip install -r requirements.txt`
 3. Make `saves/bot_key.json` following the template of `bot_key_template.json`.
