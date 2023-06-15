@@ -8,15 +8,27 @@
 
 ## extensions.hoyolab
 ### Commands
-* `/genshin daily redeem_daily`
+* `/genshin daily redeem_daily [game]`
   * Triggers redeeming the user's daily hoyolab check-in
   * Requirements: User has shared Hoyolab valid cookies
-* `/genshin code redeem <code>`
+  * Arguments:
+    * game: The game to run the command for (`Genshin Impact`, `Hokai Impact 3rd`, or `Honkai Star Rail`)
+* `/genshin code redeem <code> [game]`
   * Redeems the code for the user's genshin account
   * Requirements: User has shared Hoyolab valid cookies, code is valid
-* `/genshin code share <code>`
+  * Arguments:
+    * code: The code to try redeeming. 
+      * Automatically set to uppercase and strips whitespace
+    * game: The game to run the command for 
+      * `Genshin Impact`, `Hokai Impact 3rd`, or `Honkai Star Rail`
+* `/genshin code share <code> [game]`
   * Redeems the code for all users there is cookie data for and have enabled `auto_codes`
   * Requirements: User has shared Hoyolab valid cookies, code is valid
+  * Arguments:
+    * code: The code to try redeeming.
+      * Automatically set to uppercase and strips whitespace
+    * game: The game to run the command for 
+      * `Genshin Impact`, `Hokai Impact 3rd`, or `Honkai Star Rail`
 * `/genshin config check`
   * Checks the user's cookies and settings and returns a report
   * Requirements: User has shared Hoyolab valid cookies
