@@ -33,7 +33,6 @@ Everything related to my personal discord bot.
 4. Make `saves/bot_key.json` following the template of `bot_key_template.json`.
     - Set the `"key"` to your discord bot key.
     - Set the `"owners"` to your discord id(s).
-5. Make a directory named `logs` in the same directory as `discord_bot.py`
 
 ### Selecting Extensions
 All [extensions](#extensions) are enabled by default. 

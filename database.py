@@ -2,6 +2,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import os
 import sys
 import tempfile
 import time
@@ -22,6 +23,8 @@ def setup_logging(to_stdout: bool = True,
     local_logger = logging.getLogger(LOG_NAME)
 
     now = dt.datetime.utcnow().astimezone(dt.timezone.utc)
+    os.makedirs('logs', exist_ok=True)
+
     root_error_handler = RotatingFileHandler(
         f'logs/{now.strftime(LOG_NAME + "_notable_root")}.log',
         maxBytes=524288,
@@ -244,7 +247,6 @@ def delete_temp_file():
     # ToDo: Temp file if program is unnaturally canceled
     global TEMP_FILE
     if isinstance(TEMP_FILE, str):
-        import os
         os.remove(TEMP_FILE)
         TEMP_FILE = None
 
