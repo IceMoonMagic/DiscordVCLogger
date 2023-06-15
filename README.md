@@ -40,7 +40,7 @@ They can be disabled by commenting out / removing the lines in `discord_bot.py` 
 (the lines after`bot.load_extensions`).
 
 While the extensions should load what they need from `system.py` weather or not it's loaded as an extension,
-the bot would lack the associated commanded (notably `/system shutdown`) and proper error handling.
+the bot would lack the associated commands (notably `/system shutdown`) and proper error handling.
 
 ### Running
 Execute `python discord_bot.py`
