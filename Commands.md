@@ -57,6 +57,40 @@ receive a DM informing them of the result.
   * Trigger: `bot.on_ready` (initial startup / reconnect)
 
 ## extensions.vc_log
-***(WIP)***
 ### Commands
+* `/vclog force_scan_vcs`
+  * Make voice states assumed by logs match actual voice states
+  * Requirements: Invoker is an owner
+* `/vclog joined [channel] [amount] [time_format]`
+  * View the joined log of the current or provided voice channel
+* `/vclog left [channel] [amount] [time_format]`
+  * View the left log of the current or provided voice channel
+* `/vclog all [channel] [amount] [ignore_empty] [remove_dupes] [remove_undo] [time_format]`
+  * View all the logs of the current or provided voice channel
+* `/vclog get <include> <include_alt> [channel] [amount] [ignore_empty] [remove_dupes] [remove_undo] [time_format]`
+  * View a specific log of the current or provided voice channel
+  * Arguments:
+    * include: The voice state change type to show the logs of
+    * include_alt: Include the 'opposite' voice state change type as well
+      * e.g. `channel_join` and `channel_left`
+* Arguments:
+    * channel: The channel to get logs from
+      * If empty: Uses channel sent in, channel invoker is in, or fails
+    * amount: The number of entries to display
+      * -1 = all (or at least however many can fit in the field)
+    * time_format: The time format to send with the timestamps
+    * ignore_empty: Weather or not to include fields for voice state change types that have no events
+    * remove_dupes: Weather or not to include multiple events by the same member
+      for the same voice state change type
+    * remove_undo: Weather or not to include actions that where 'undone' by later actions
+      * e.g. exclude a `channel_join` if that member has a later `channel_left`
+    * time_format: The time format for the timestamps
+      * See [Discord's Docs](https://discord.com/developers/docs/reference#message-formatting-timestamp-styles)
+        and [LeviSnoot's Explanation](https://gist.github.com/LeviSnoot/d9147767abeef2f770e9ddcd91eb85aa)
 ### Routines / Listeners
+* `on_ready`
+  * When the bot is fully connected, make voice states assumed by logs match actual voice states
+  * Same as manually running `/vclog force_scan_vcs`
+* `on_voice_state_update`
+  * When a member performs a voice state update, log the who, what, and when.
+  * When a member leaves and the voice channel is then empty, clears all logs for that channel

@@ -47,10 +47,26 @@ The following extensions require a key:
 
 ## Extensions
 ### VC Log
-**(WIP / Out of Order)**
-
 Records voice state updates in discord.
 This was started to help find out who just joined / left a voice channel or how long ago that was.
+
+When a user performs (or has performed on them) a voice state update (e.g. joining / leaving a channel or (un)muting),
+the event will be logged. Users can then use commands to view the logs.
+The logs are cleared when the last person leaves a voice channel.
+
+Users can view the logs for all voice state change types with `/vclog all`, or a specific set with `/vclog get`.
+
+Users can fetch when the currently present members joined using `/vclog joined` 
+and when currently absent members (that were previously present) left using `/vclog left`.
+
+While `/vclog joined` is equivalent to 
+`/vclog get {include: channel_join} {include_alt: False} {ignore_empty: False} {only_present: True}`,
+`/vclog left` would be equivalent to 
+`/vclog get {include: channel_left} {include_alt: False} {ignore_empty: False} {only_present: None}`,
+but this can't be sent in a slash command set to expect a boolean response.
+
+While the bot should automatically try fixing up the logs when it's 'ready' (properly connects / reconnects to Discord),
+a call to the fixup method can be done with `/vclog force_scan_vcs` by owners.
 
 ### HoyoLab
 Allows automatically redeeming [HoyoLab Daily Check-In](https://genshin-impact.fandom.com/wiki/HoYoLAB_Community_Daily_Check-In) and redeeming [Genshin Gift Codes](https://genshin.hoyoverse.com/en/gift).
