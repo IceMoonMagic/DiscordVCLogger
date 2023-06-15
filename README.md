@@ -5,6 +5,7 @@ Everything related to my personal discord bot.
 * [Setup](#setup)
     * [Requirements](#requirements)
     * [Preparations](#preparations)
+    * [Selecting Extensions](#selecting-extensions)
     * [Running](#running)
 * [Extensions](#extensions)
     * [VC Log](#vc-log)
@@ -22,11 +23,25 @@ Everything related to my personal discord bot.
 
 ### Preparations
 1. Install a Python version of at least `3.11`
-2. Install requirements
+2. Optionally, create a virtual environment with `python -m venv .venv` and
+    activate it.
+   * Windows (cmd.exe) `.venv\Scripts\activate.bat`
+   * Windows (PowerShell) `.venv\Scripts\activate.ps1`
+   * MacOS / Linux (Bash) `source .venv/bin/activate` 
+3. Install requirements with
    `python -m pip install -r requirements.txt`
-3. Make `saves/bot_key.json` following the template of `bot_key_template.json`.
+4. Make `saves/bot_key.json` following the template of `bot_key_template.json`.
     - Set the `"key"` to your discord bot key.
     - Set the `"owners"` to your discord id(s).
+5. Make a directory named `logs` in the same directory as `discord_bot.py`
+
+### Selecting Extensions
+All [extensions](#extensions) are enabled by default. 
+They can be disabled by commenting out / removing the lines in `discord_bot.py` where they are loaded 
+(the lines after`bot.load_extensions`).
+
+While the extensions should load what they need from `system.py` weather or not it's loaded as an extension,
+the bot would lack the associated commanded (notably `/system shutdown`) and proper error handling.
 
 ### Running
 Execute `python discord_bot.py`
@@ -46,6 +61,7 @@ The following extensions require a key:
 - `HoyoLab`: Unlocked with `/genshin unlock` and submitting a key to the modal.
 
 ## Extensions
+A full list of commands is available [here](Commands.md).
 ### VC Log
 Records voice state updates in discord.
 This was started to help find out who just joined / left a voice channel or how long ago that was.
@@ -100,10 +116,7 @@ Owners can unlock the extension's data with `/genshin unlock` or re-lock it with
 
 ## Contributions
 This is a personal project, any modifications you may want to make will likely be better suited for your own fork.
-[See Licence](#license)
 
 ## License
-[MIT License](LICENSE)
-
-[Read More](https://choosealicense.com/licenses/mit/#)
+[MIT License](LICENSE) | [Read More](https://choosealicense.com/licenses/mit/#)
 
