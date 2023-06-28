@@ -7,6 +7,8 @@
   * Requirements: Invoker is an owner
 
 ## extensions.hoyolab
+___Abandoned___ due to taking more work to maintain than it is worth (thanks Hoyoverse).
+It'll likely be removed once daily check-in completely stops working, as it seems like the only working part remaining.
 ### Commands
 * `/genshin daily redeem_daily [game]`
   * Triggers redeeming the user's daily hoyolab check-in

@@ -84,6 +84,9 @@ While the bot should automatically try fixing up the logs when it's 'ready' (pro
 a call to the fixup method can be done with `/vclog force_scan_vcs` by owners.
 
 ### HoyoLab
+___Abandoned___ due to taking more work to maintain than it is worth (thanks Hoyoverse).
+It'll likely be removed once daily check-in completely stops working, as it seems like the only working part remaining.
+
 Allows automatically redeeming [HoyoLab Daily Check-In](https://genshin-impact.fandom.com/wiki/HoYoLAB_Community_Daily_Check-In) 
 and redeeming [Gift Codes](https://genshin.hoyoverse.com/en/gift).
 (Note: Links here are specific to Genshin Impact, but functionality should be present for Honkai Impact 3rd and Honkai Star Rail as well)
