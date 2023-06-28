@@ -83,6 +83,15 @@ but this can't be sent in a slash command set to expect a boolean response.
 While the bot should automatically try fixing up the logs when it's 'ready' (properly connects / reconnects to Discord),
 a call to the fixup method can be done with `/vclog force_scan_vcs` by owners.
 
+### Misc
+Simple commands that don't fit elsewhere.
+
+A user can open the context menu of a message, `Apps > Convert Links` to have the bot replace parts of the link to work better with discord.
+For example, fixing a twitter embed by using [vxTwitter](https://github.com/dylanpdx/BetterTwitFix).
+This can be configured in the json under `link_fixes`. 
+Note that this simply uses Python's `str.replace` 
+and replacements logic can be tested with `python -c "print('link_text'.replace('old', 'new'))"`.
+
 ### HoyoLab
 ___Abandoned___ due to taking more work to maintain than it is worth (thanks Hoyoverse).
 It'll likely be removed once daily check-in completely stops working, as it seems like the only working part remaining.

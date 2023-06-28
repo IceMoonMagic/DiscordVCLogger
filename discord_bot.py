@@ -35,6 +35,7 @@ def main():
         'system',
         'extensions.hoyolab',
         'extensions.vc_log',
+        'extensions.misc',
     )
 
     bot.run(key)

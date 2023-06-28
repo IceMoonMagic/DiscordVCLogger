@@ -1,5 +1,8 @@
 {
   "key": "BotKey",
   "owners": [],
-  "check-in icon": "https://act.hoyolab.com/ys/event/signin-sea-v3/images/paimon.792472e0.png"
+  "check-in icon": "https://act.hoyolab.com/ys/event/signin-sea-v3/images/paimon.792472e0.png",
+  "link_fixes": {
+    "https://twitter.com": "https://vxtwitter.com"
+  }
 }
