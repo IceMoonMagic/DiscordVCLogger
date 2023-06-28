@@ -319,6 +319,7 @@ async def _redeem_daily(
         client: genshin.Client,
         ctx: discord.ApplicationContext = None) -> \
         discord.Embed:
+    failed_to_claim = f'Failed to claim daily rewards for {client.game.name}'
     try:
         reward = await client.claim_daily_reward()
         embed = system.make_embed(
@@ -331,12 +332,24 @@ async def _redeem_daily(
     except genshin.AlreadyClaimed:
         return system.make_error(
             'Daily Rewards Already Claimed',
-            'Failed to claim daily rewards as '
+            f'{failed_to_claim} as '
             'they have already been claimed.')
     except genshin.InvalidCookies:
         return system.make_error(
             'Invalid Cookies',
-            'Failed to claim daily rewards as saved cookies are invalid')
+            f'{failed_to_claim} as saved cookies are invalid')
+    except genshin.GeetestTriggered:
+        return system.make_error(
+            'Geetest Triggered',
+            f'{failed_to_claim} as '
+            'a GeeTest Captcha was triggered. '
+            'It is unclear what the best way to fix this is. '
+            'For now, you will have to manually redeem them at '
+            '[HoyoLab](www.hoyolab.com).')
+    except Exception as e:
+        return system.make_error(
+            'Unknown Exception',
+            f'{failed_to_claim}. Unknown exception `{type(e)}')
 
 
 # @loop(time=dt.time(0, 5, 5, tzinfo=dt.timezone(dt.timedelta(hours=8))))
