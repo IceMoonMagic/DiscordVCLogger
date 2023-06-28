@@ -35,7 +35,7 @@ class MiscCommands(cmds.Cog):
         if new_text != message.content:
             await ctx.respond(new_text)
         else:
-            await ctx.followup.send(
+            await ctx.respond(
                 embed=system.make_error('No links to fix.' f'`{new_text}`'),
                 ephemeral=True
             )
