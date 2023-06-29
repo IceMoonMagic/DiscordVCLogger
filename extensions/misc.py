@@ -39,3 +39,28 @@ class MiscCommands(cmds.Cog):
                 embed=system.make_error('No links to fix.' f'`{new_text}`'),
                 ephemeral=True
             )
+
+    @discord.user_command(name='Get Avatar')
+    async def get_avatar(
+            self,
+            ctx: discord.ApplicationContext,
+            user: discord.User | discord.Member):
+
+        embeds: list[discord.Embed] = [
+            system.make_embed(
+                title=f'Avatar',
+                desc=user.mention,
+                color=user.color).
+            set_image(url=user.display_avatar.url)]
+
+        if isinstance(user, discord.Member) and user.guild_avatar:
+            embeds[0].title = f'Local Avatar'
+            embeds.insert(
+                0,
+                system.make_embed(
+                    title=f'Global Avatar',
+                    desc=user.mention,
+                    color=user.accent_color).
+                set_image(url=user.avatar.url))
+
+        await ctx.respond(embeds=embeds)
