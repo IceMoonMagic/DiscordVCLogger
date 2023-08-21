@@ -2,4 +2,5 @@ py-cord~=2.3
 aiosqlite~=0.17.0
 pynacl~=1.5
 
+requests~=2.31
 genshin~=1.6
