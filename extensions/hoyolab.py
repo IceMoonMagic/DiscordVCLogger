@@ -356,12 +356,17 @@ async def _redeem_daily(
 @loop(time=dt.time(16, 15, 5))
 async def auto_redeem_daily(bot: cmd.Bot):
     logger.info('Automatically claiming daily rewards.')
+    from random import randint
+
+    async def _auto_redeem_daily(**kwargs):
+        await asyncio.sleep(randint(0, 900))
+        await system.do_and_dm(**kwargs)
 
     async with asyncio.TaskGroup() as tg:
         async for person in HoyoLabData.load_gen(auto_daily=True):
             for account in await _make_client(person).get_game_accounts():
                 client = _make_client(person, account.game)
-                tg.create_task(system.do_and_dm(
+                tg.create_task(_auto_redeem_daily(
                     user_id=person.snowflake,
                     bot=bot,
                     coro=_redeem_daily(client),
