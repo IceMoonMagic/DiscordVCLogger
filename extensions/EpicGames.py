@@ -130,6 +130,19 @@ class EpicGames(cmd.Cog):
                  f'will now not be sent here.'
         ))
 
+    @epic_cmds.command()
+    async def current(
+            self,
+            ctx: discord.ApplicationContext):
+        await ctx.defer()
+        if self.check_loop is None or self.check_loop.done():
+            games, _ = await fetch_free_games()
+        else:
+            games = await FreeGame.load_all()
+        await ctx.respond(embeds=await get_game_embeds(
+            games=games,
+            last_notif=dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
+        ))
 
 
 async def get_game_embeds(
