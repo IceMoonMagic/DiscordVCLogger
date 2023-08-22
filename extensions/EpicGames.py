@@ -27,6 +27,9 @@ def teardown(bot: cmd.Bot):
 EPIC_FREE_PROMOTIONS_URL = \
     (r'https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions?'
      r'locale=en-US&country=US&allowCountries=US')
+EPIC_STORE_HOME = r'https://www.epicgames.com'
+EPIC_ICON = r'https://cdn2.steamgriddb.com/file/sgdb-cdn/icon/' \
+            r'1d7b813d77ada92b4c5998ec42a3cde9.png'
 
 
 @dc.dataclass(frozen=True)
@@ -35,9 +38,12 @@ class FreeGame(db.Storable):
     table_name = 'EpicGamesFreeGames'
 
     name: str
+    desc: str
+    page_url: str
     start: dt.datetime
     end: dt.datetime
     price_str: str
+    image_url: str
     _p_key: int = dc.field(default=None)
 
     def __post_init__(self: db.S) -> db.S:
@@ -152,13 +158,38 @@ async def get_game_embeds(
     embeds: list[discord.Embed] = []
     for game in games:
         if game.start > last_notif and game.active:
-            embeds.append(system.make_embed(
-                title=f'`{game.name}` is Free on The Epic Games Store',
-                desc=f'{system.get_time_str(game.start, "f")} - '
-                     f'{system.get_time_str(game.end, "f")}'
-                     f'({system.get_time_str(game.end, "R")})'
-                     f'\nNormally: {game.price_str}'
-            ))
+            if game.page_url:
+                url = f'{EPIC_STORE_HOME}/p/{game.page_url}'
+            else:
+                url = None
+            image = game.image_url or None
+            embeds.append(
+                system.make_embed(
+                    title=f'`{game.name}` is Free on The Epic Games Store',
+                    desc=game.desc,
+                    url=url,
+                ).set_author(
+                    name='The Epic Games Store',
+                    url=EPIC_STORE_HOME,
+                    icon_url=EPIC_ICON
+                ).set_image(
+                    url=image
+                ).add_field(
+                    name='Normally',
+                    value=game.price_str,
+                    inline=True
+                ).add_field(
+                    name='Start Time',
+                    value=f'{system.get_time_str(game.start, "f")}\n'
+                          f'({system.get_time_str(game.start, "R")})',
+                    inline=True
+                ).add_field(
+                    name='End Time',
+                    value=f'{system.get_time_str(game.end, "f")}\n'
+                          f'({system.get_time_str(game.end, "R")})',
+                    inline=True
+                )
+            )
     return embeds
 
 
@@ -197,11 +228,29 @@ async def fetch_free_games() -> tuple[list[FreeGame], dt.datetime]:
             promotions[0]['promotionalOffers'][0]['startDate'])
         end = dt.datetime.fromisoformat(
             promotions[0]['promotionalOffers'][0]['endDate'])
+
+        for img in game['keyImages']:
+            if img['type'] == 'OfferImageWide':
+                image_url = img['url']
+                break
+        else:
+            image_url = ''
+
+        if (page_url := game['productSlug']) is None:
+            for offerMapping in game.get('offerMappings', []):
+                if page_url := offerMapping.get('pageSlug', False):
+                    break
+            else:
+                page_url = ''
+
         games.append(FreeGame(
             name=game['title'],
+            desc=game['description'],
             start=start,
             end=end,
-            price_str=game['price']['totalPrice']['fmtPrice']['originalPrice']
+            price_str=game['price']['totalPrice']['fmtPrice']['originalPrice'],
+            image_url=image_url,
+            page_url=page_url,
         ))
         next_update = min(next_update, end if games[-1].active else start)
 
