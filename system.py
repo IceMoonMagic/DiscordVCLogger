@@ -1,7 +1,5 @@
-import re
 from asyncio import TaskGroup
-from datetime import datetime
-from typing import Any, Coroutine, Callable
+from typing import Coroutine
 
 import discord
 import discord.ext.commands as cmd
@@ -9,6 +7,7 @@ import discord.ui
 import nacl.exceptions
 
 import database as db
+import utils
 
 # https://docs.pycord.dev/en/stable/api.html?highlight=intents#discord.Intents
 intents = discord.Intents(
@@ -79,7 +78,7 @@ class System(cmd.Cog):
         hostname = socket.gethostname()
         ip = socket.gethostbyname(hostname)
         await ctx.respond(
-            embed=make_embed(f'Local IP Address', ip, ctx=ctx),
+            embed=utils.make_embed(f'Local IP Address', ip, ctx=ctx),
             ephemeral=True)
 
     @cmd.Cog.listener()
@@ -116,7 +115,7 @@ class System(cmd.Cog):
                 return
 
             case cmd.DisabledCommand():
-                await ctx.respond(embed=make_error(
+                await ctx.respond(embed=utils.make_error(
                     'Command is Disabled',
                     f'Command `{ctx.command.qualified_name}` is '
                     f'disabled and therefore cannot be used.'))
@@ -168,7 +167,7 @@ class System(cmd.Cog):
             f' invoked {ctx.command.qualified_name}'
             f' which raised a(n) {type(cause)}.')
 
-        await ctx.respond(embed=make_error(title, desc))
+        await ctx.respond(embed=utils.make_error(title, desc))
 
         if raise_it:
             raise cause
@@ -178,147 +177,3 @@ def add_shutdown_step(bot: cmd.Bot, coro: Coroutine):
     foo = bot.get_cog(System.qualified_name)
     if isinstance(foo, System):
         foo.shutdown_coroutines.append(coro)
-
-
-async def get_dm(user_id: int, bot: cmd.Bot) -> discord.DMChannel:
-    user = await bot.get_or_fetch_user(user_id)
-    return user.dm_channel or await user.create_dm()
-
-
-def make_embed(title: str = None, desc: str = None,
-               ctx: discord.ApplicationContext = None,
-               color: discord.Color = None,
-               embed: discord.Embed = None,
-               **kwargs) -> discord.Embed:
-    """Creates a uniform standard embed for other methods to send."""
-    if embed is not None:
-        title = embed.title if title is None else title
-        desc = embed.description if desc is None else desc
-        color = embed.color if ctx is None and color is None else color
-
-    if title:
-        kwargs.update({'title': title})
-    if desc:
-        kwargs.update({'description': desc})
-
-    if color:
-        kwargs.update({'color': color})
-    elif ctx:
-        kwargs.update({'color': ctx.me.color})
-    else:
-        kwargs.update({'color': discord.Color.blurple()})
-
-    return discord.Embed(**kwargs)
-
-
-class ErrorEmbed(discord.Embed):
-
-    def __bool__(self):
-        return False
-
-
-def make_error(title: str = 'Error', desc: str = 'Generic Error', **kwargs) \
-        -> ErrorEmbed:
-    """Creates a uniform error embed for other methods to send."""
-    return ErrorEmbed(
-        title=title, description=desc,
-        color=discord.Color.dark_red(), **kwargs)
-
-
-def autogenerate_options(fn):
-    if not fn.__doc__:
-        return fn
-    none_type = type(None)
-    docstring = re.sub(r'\s+', ' ', fn.__doc__).strip()
-    params = docstring.split(':param ')[1:]
-    for param in params:
-        name, docs = re.findall(r'([\w\d]+):\s([\w\W]+)', param)[0]
-        anno = fn.__annotations__.get(name) or str
-        match anno:
-            case discord.ApplicationContext | discord.Interaction:
-                continue
-            case discord.Option():
-                if anno.description == 'No description provided':
-                    anno.description = docs
-            case _:
-                if hasattr(anno, '__args__') and \
-                        none_type in (anno := anno.__args__):
-                    anno = tuple(a for a in anno if a != none_type)
-                if fn.__kwdefaults__ is None or name not in fn.__kwdefaults__:
-                    option = discord.Option(
-                        anno,
-                        description=docs,
-                        required=True)
-                else:
-                    option = discord.Option(
-                        anno,
-                        description=docs,
-                        default=fn.__kwdefaults__.get(name))
-                fn.__annotations__[name] = option
-    return fn
-
-
-def get_time_str(time: datetime | int,
-                 time_format: str = '') -> str:
-    if time_format not in {'', 't', 'T', 'd', 'D', 'f', 'F', 'R'}:
-        raise ValueError(f'Unrecognized time format {time_format}')
-    if isinstance(time, datetime):
-        time = int(time.timestamp())
-    return f'<t:{time}:{time_format}>'
-
-
-time_format_option = discord.Option(str, default='R', choices=[
-    discord.OptionChoice('Short Time', 't'),
-    discord.OptionChoice('Long Time', 'T'),
-    discord.OptionChoice('Short Date', 'd'),
-    discord.OptionChoice('Long Date', 'D'),
-    discord.OptionChoice('Short Date/Time', 'f'),
-    discord.OptionChoice('Long Date/Time', 'F'),
-    discord.OptionChoice('Relative Time', 'R')
-])
-
-
-class UnlockModal(discord.ui.Modal):
-
-    def __init__(self, unlock_type: type[db.S], *children: discord.ui.InputText):
-        super().__init__(*children, title=unlock_type.__name__)
-
-        self.unlock_type = unlock_type
-
-        self.add_item(discord.ui.InputText(
-            label='Key',
-            placeholder='key',
-            min_length=32,
-            max_length=32))
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        try:
-            self.unlock_type.set_key(self.children[0].value)
-            await interaction.followup.send(
-                ephemeral=True,
-                embed=make_embed(
-                    f'Unlocked {self.unlock_type.__name__}',
-                    color=interaction.guild.me.color
-                    if interaction.guild else None))
-        except ValueError as e:
-            await interaction.followup.send(
-                ephemeral=True,
-                embed=make_error(
-                    f'Failed to unlock {self.unlock_type.__name__}',
-                    f'{type(e).__name__}: {e}'))
-
-
-async def send_dm(user_id: int, bot: cmd.Bot, *msg_args, **msg_kwargs):
-    dm = await get_dm(user_id, bot)
-    await dm.send(*msg_args, **msg_kwargs)
-
-
-async def do_and_dm(user_id: int, bot: cmd.Bot,
-                    coro: Coroutine[Any, Any, discord.Embed],
-                    send: bool = True) -> discord.Embed:
-    embed = await coro
-    if send:
-        await send_dm(user_id, bot, embed=embed)
-    return embed

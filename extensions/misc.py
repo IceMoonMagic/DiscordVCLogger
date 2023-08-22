@@ -2,7 +2,7 @@ import discord
 import discord.ext.commands as cmds
 
 import database as db
-import system
+import utils
 
 logger = db.get_logger(__name__)
 
@@ -36,7 +36,7 @@ class MiscCommands(cmds.Cog):
             await ctx.respond(new_text)
         else:
             await ctx.respond(
-                embed=system.make_error('No links to fix.' f'`{new_text}`'),
+                embed=utils.make_error('No links to fix.' f'`{new_text}`'),
                 ephemeral=True
             )
 
@@ -47,7 +47,7 @@ class MiscCommands(cmds.Cog):
             user: discord.User | discord.Member):
 
         embeds: list[discord.Embed] = [
-            system.make_embed(
+            utils.make_embed(
                 title=f'Avatar',
                 desc=user.mention,
                 color=user.color).
@@ -57,7 +57,7 @@ class MiscCommands(cmds.Cog):
             embeds[0].title = f'Local Avatar'
             embeds.insert(
                 0,
-                system.make_embed(
+                utils.make_embed(
                     title=f'Global Avatar',
                     desc=user.mention,
                     color=user.accent_color).

@@ -8,7 +8,7 @@ import discord
 import discord.ext.commands as cmds
 
 import database as db
-import system
+import utils
 
 logger = db.get_logger(__name__)
 
@@ -145,7 +145,7 @@ class VcLog(cmds.Cog):
     async def force_scan_vcs(self, ctx: discord.ApplicationContext):
         ctx.defer()
         await _log_reconciliation(self.bot)
-        await ctx.respond(system.make_embed(desc='Reconciled Logs', ctx=ctx))
+        await ctx.respond(utils.make_embed(desc='Reconciled Logs', ctx=ctx))
 
     @cmds.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member,
@@ -163,11 +163,11 @@ class VcLog(cmds.Cog):
     log_command_group = discord.SlashCommandGroup("vclog", "foo")
 
     @log_command_group.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def joined(self, ctx: discord.ApplicationContext = None, *,
                      channel: VOICE_STATE_CHANNELS | None = None,
                      amount: int = -1,
-                     time_format: system.time_format_option = 'R'):
+                     time_format: utils.time_format_option = 'R'):
         # async def joined(self, ctx: discord.ApplicationContext):
         """
         Shows who has joined a VC and how long ago. Default to your VC.
@@ -188,11 +188,11 @@ class VcLog(cmds.Cog):
             time_format=time_format))
 
     @log_command_group.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def left(self, ctx: discord.ApplicationContext, *,
                    channel: VOICE_STATE_CHANNELS | None = None,
                    amount: int = -1,
-                   time_format: system.time_format_option = 'R'):
+                   time_format: utils.time_format_option = 'R'):
         # async def left(self, ctx: discord.ApplicationContext):
         """
         Shows who have left a VC and how long ago. Defaults to your VC.
@@ -213,12 +213,12 @@ class VcLog(cmds.Cog):
             time_format=time_format))
 
     @log_command_group.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def all(self, ctx: discord.ApplicationContext, *,
                   channel: VOICE_STATE_CHANNELS | None = None,
                   amount: int = -1, ignore_empty: bool = True,
                   remove_dupes: bool = True, remove_undo: bool = True,
-                  time_format: system.time_format_option = 'R'):
+                  time_format: utils.time_format_option = 'R'):
         """
         Get all the logs from a VC. Defaults to your VC.
 
@@ -244,7 +244,7 @@ class VcLog(cmds.Cog):
             time_format=time_format))
 
     @log_command_group.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def get(self, ctx: discord.ApplicationContext,
                   include: discord.Option(
                       str, choices=VoiceStateChange.__members__),
@@ -253,7 +253,7 @@ class VcLog(cmds.Cog):
                   amount: int = -1, ignore_empty: bool = False,
                   remove_dupes: bool = True, remove_undo: bool = True,
                   only_present: bool = False,
-                  time_format: system.time_format_option = 'R',
+                  time_format: utils.time_format_option = 'R',
                   ):
         """
         Get specified logs from a VC. Defaults to your VC.
@@ -361,7 +361,7 @@ async def _vc_log_embed(
         amount: int = -1,
         only_present: bool | None = True,
         channel: VOICE_STATE_CHANNELS | None = None,
-        time_format: str = 'R',
+        time_format: utils.TimestampStyle = 'R',
         ignore_empty: bool = True,
         remove_dupes: bool = True,
         remove_undo: bool = True) \
@@ -390,7 +390,7 @@ async def _vc_log_embed(
             isinstance(ctx.user.voice.channel, VOICE_STATE_CHANNELS):
         vc = ctx.user.voice.channel
     else:
-        return system.make_error(
+        return utils.make_error(
             title='Could not fetch VC Log',
             desc='You\'re not in a Voice Channel.')
 
@@ -424,14 +424,14 @@ async def _vc_log_embed(
                 (remove_undo and mention in
                  fields.get(event.change.opposite.name, '')):
             continue
-        time_str = system.get_time_str(event.time, time_format)
+        time_str = utils.format_dt(event.time, time_format)
         line = f'- {mention} {time_str}\n'
         if len(existing + line) > 1023:
             fields[event.change_name] = existing + '+'
         else:
             fields[event.change_name] = existing + line
 
-    embed = system.make_embed(
+    embed = utils.make_embed(
         title=f'Voice Event history in `{vc.name}`:', ctx=ctx)
     for field in vsc_types:
         if ignore_empty and field not in fields:
