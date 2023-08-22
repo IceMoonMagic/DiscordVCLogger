@@ -31,13 +31,19 @@ EPIC_FREE_PROMOTIONS_URL = \
 
 @dc.dataclass(frozen=True)
 class FreeGame(db.Storable):
-    primary_key_name = 'name'
+    primary_key_name = '_p_key'
     table_name = 'EpicGamesFreeGames'
 
     name: str
     start: dt.datetime
     end: dt.datetime
     price_str: str
+    _p_key: int = dc.field(default=None)
+
+    def __post_init__(self: db.S) -> db.S:
+        if self._p_key is None:
+            object.__setattr__(self, '_p_key', hash(self))
+        return super().__post_init__()
 
     @property
     def active(self) -> bool:
@@ -50,7 +56,6 @@ class FreeNotifications(db.Storable):
     table_name = 'EpicGamesNotifications'
 
     discord_snowflake: int
-    channel_type: type
 
     @property
     def snowflake(self) -> int:
@@ -58,7 +63,74 @@ class FreeNotifications(db.Storable):
 
 
 class EpicGames(cmd.Cog):
-    pass
+    def __init__(self, bot: cmd.Bot):
+        self.bot = bot
+        self.check_loop: asyncio.Task | None = None
+
+    @cmd.Cog.listener()
+    async def on_ready(self):
+        if self.check_loop is None:
+            self.check_loop = asyncio.create_task(games_check_loop(self.bot))
+
+    epic_cmds = discord.SlashCommandGroup('epic', 'epic games')
+
+    @staticmethod
+    def epic_check(ctx: discord.ApplicationContext) -> bool:
+        to = ctx.channel
+        print(type(to))
+        if isinstance(to, discord.PartialMessageable):
+            return True
+        perms = to.permissions_for(ctx.author)
+        if perms.manage_webhooks:
+            return True
+        elif isinstance(to, discord.abc.GuildChannel) and not perms.manage_channels:
+            return True
+        elif isinstance(to, discord.Thread) and not perms.manage_threads:
+            return True
+        return False
+
+    @epic_cmds.command()
+    @cmd.check(epic_check)
+    @system.autogenerate_options
+    async def add_notif(
+            self,
+            ctx: discord.ApplicationContext):
+
+        await ctx.defer()
+        if isinstance(to := ctx.channel, discord.PartialMessageable):
+            to = ctx.author
+        to_notif = FreeNotifications(to.id)
+        await to_notif.save()
+        await ctx.respond(embed=system.make_embed(
+            title='Notifications Added',
+            desc=f'Messages for free games on The Epic Games Store '
+                 f'will now be sent here.'
+        ))
+        if self.check_loop is None or self.check_loop.done():
+            self.check_loop = asyncio.create_task(games_check_loop(self.bot))
+        else:
+            await _games_notify(
+                bot=self.bot,
+                send_to=[to_notif],
+                games=await FreeGame.load_all(),
+                last_notif=dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
+            )
+
+    @epic_cmds.command()
+    @cmd.check(epic_check)
+    @system.autogenerate_options
+    async def rm_notif(
+            self,
+            ctx: discord.ApplicationContext):
+        await ctx.defer()
+        if isinstance(to := ctx.channel, discord.PartialMessageable):
+            to = ctx.author
+        await FreeNotifications.delete(to.id)
+        await ctx.respond(embed=system.make_embed(
+            title='Notifications Removed',
+            desc=f'Messages for free games on The Epic Games Store '
+                 f'will now not be sent here.'
+        ))
 
 
 async def _games_notify(
@@ -77,9 +149,10 @@ async def _games_notify(
                      f'({system.get_time_str(game.end, "R")})'
                      f'\nNormally: {game.price_str}'
             ))
-    with asyncio.TaskGroup() as tg:
+    async with asyncio.TaskGroup() as tg:
         for s in send_to:
-            channel = bot.get_channel(s.snowflake)
+            if (channel := bot.get_channel(s.snowflake)) is None:
+                channel = await system.get_dm(s.snowflake, bot)
             tg.create_task(channel.send(embeds=embeds))
 
 
@@ -88,9 +161,9 @@ async def games_check_loop(bot: cmd.Bot):
     while len(notif := await FreeNotifications.load_all()) > 0:
         fetched_games, next_update = await fetch_free_games()
         await FreeGame.delete_all()
+        for game in fetched_games:
+            await game.save()
         async with asyncio.TaskGroup() as tg:
-            for game in fetched_games:
-                tg.create_task(game.save())
             tg.create_task(
                 _games_notify(bot, notif, fetched_games, last_update))
             last_update = dt.datetime.now(tz=dt.timezone.utc)
