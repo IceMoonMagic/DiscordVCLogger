@@ -1,8 +1,8 @@
 """Code to let a bot to track joins and disconnects of Discord voice channels"""
 import dataclasses as dc
+import datetime as dt
 import enum
 from collections.abc import Collection
-from datetime import datetime, timezone
 
 import discord
 import discord.ext.commands as cmds
@@ -103,8 +103,7 @@ class VoiceStateChangeLog(db.Storable):
     channel_id: int
     user_id: int
     change_name: str
-    time: datetime = dc.field(
-        default_factory=lambda: datetime.now(tz=timezone.utc))
+    time: dt.datetime = dc.field(default_factory=utils.utcnow)
     _p_key: int = dc.field(default=None)
 
     def __post_init__(self: db.S) -> db.S:
@@ -293,7 +292,7 @@ async def _log_changes(
         member_id: int,
         old_state: discord.VoiceState,
         new_state: discord.VoiceState):
-    time = datetime.now(tz=timezone.utc)
+    time = utils.utcnow()
     for change in VoiceStateChange.find_changes(old_state, new_state):
         if change == VoiceStateChange.channel_leave:
             if len(old_state.channel.voice_states) == 0:
