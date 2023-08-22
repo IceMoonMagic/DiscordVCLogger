@@ -109,12 +109,10 @@ class EpicGames(cmd.Cog):
         if self.check_loop is None or self.check_loop.done():
             self.check_loop = asyncio.create_task(games_check_loop(self.bot))
         else:
-            await _games_notify(
-                bot=self.bot,
-                send_to=[to_notif],
+            await ctx.respond(embeds=await get_game_embeds(
                 games=await FreeGame.load_all(),
                 last_notif=dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
-            )
+            ))
 
     @epic_cmds.command()
     @cmd.check(epic_check)
@@ -133,12 +131,11 @@ class EpicGames(cmd.Cog):
         ))
 
 
-async def _games_notify(
-        bot: cmd.Bot,
-        send_to: list[FreeNotifications],
+
+async def get_game_embeds(
         games: list[FreeGame],
         last_notif: dt.datetime
-):
+) -> list[discord.Embed]:
     embeds: list[discord.Embed] = []
     for game in games:
         if game.start > last_notif and game.active:
@@ -149,11 +146,7 @@ async def _games_notify(
                      f'({system.get_time_str(game.end, "R")})'
                      f'\nNormally: {game.price_str}'
             ))
-    async with asyncio.TaskGroup() as tg:
-        for s in send_to:
-            if (channel := bot.get_channel(s.snowflake)) is None:
-                channel = await system.get_dm(s.snowflake, bot)
-            tg.create_task(channel.send(embeds=embeds))
+    return embeds
 
 
 async def games_check_loop(bot: cmd.Bot):
@@ -164,11 +157,14 @@ async def games_check_loop(bot: cmd.Bot):
         for game in fetched_games:
             await game.save()
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(
-                _games_notify(bot, notif, fetched_games, last_update))
-            last_update = dt.datetime.now(tz=dt.timezone.utc)
-            sleep = next_update - last_update
-            tg.create_task(asyncio.sleep(sleep.total_seconds()))
+            embeds = await get_game_embeds(fetched_games, last_update)
+            for n in notif:
+                if (channel := bot.get_channel(n.snowflake)) is None:
+                    channel = await system.get_dm(n.snowflake, bot)
+                tg.create_task(channel.send(embeds=embeds))
+        last_update = dt.datetime.now(tz=dt.timezone.utc)
+        sleep = next_update - last_update
+        await asyncio.sleep(sleep.total_seconds())
 
 
 async def fetch_free_games() -> tuple[list[FreeGame], dt.datetime]:
