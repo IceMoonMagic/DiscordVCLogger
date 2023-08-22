@@ -22,7 +22,7 @@ def setup_logging(to_stdout: bool = True,
     root_logger = logging.getLogger()
     local_logger = logging.getLogger(LOG_NAME)
 
-    now = dt.datetime.utcnow().astimezone(dt.timezone.utc)
+    now = dt.datetime.now(tz=dt.timezone.utc)
     os.makedirs('logs', exist_ok=True)
 
     root_error_handler = RotatingFileHandler(
@@ -135,7 +135,8 @@ class Storable:
         encrypted = {}
         unique_chars: int = len(str(len(self.encrypt_attrs)))
         primary_value = f'{getattr(self, self.primary_key_name)}'
-        nonce_base = f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
+        nonce_base = \
+            f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
         for i, attr in enumerate(self.encrypt_attrs):
             nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
 
@@ -154,7 +155,8 @@ class Storable:
 
         unique_chars: int = len(str(len(work_on.encrypt_attrs)))
         primary_value = f'{getattr(work_on, work_on.primary_key_name)}'
-        nonce_base = f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
+        nonce_base = \
+            f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
         for i, attr in enumerate(work_on.encrypt_attrs):
             nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
 
@@ -220,14 +222,20 @@ class MissingEncryptionKey(RuntimeError):
 
 
 async def does_table_exist(table_name, temp: bool) -> bool:
-    # ToDo: LBYL instead of EAFP
     async with sql.connect(get_db_file(temp)) as db:
-        try:
-            await db.execute(f'SELECT * FROM {table_name}')
-            return True
-        except sql.OperationalError as e:
-            logger.debug(e)
-            return False
+        command = f'SELECT sql FROM sqlite_master WHERE name = "{table_name}"'
+        logger.debug(command)
+        table_sql = await db.execute_fetchall(command)
+        return bool(table_sql)
+
+    # # ToDo: LBYL instead of EAFP
+    # async with sql.connect(get_db_file(temp)) as db:
+    #     try:
+    #         await db.execute(f'SELECT * FROM {table_name}')
+    #         return True
+    #     except sql.OperationalError as e:
+    #         logger.debug(e)
+    #         return False
 
 
 def get_temp_file() -> str:
@@ -242,6 +250,7 @@ def get_db_file(temp: bool) -> str:
     if temp:
         return get_temp_file()
     return DB_FILE
+
 
 def delete_temp_file():
     # ToDo: Temp file if program is unnaturally canceled
