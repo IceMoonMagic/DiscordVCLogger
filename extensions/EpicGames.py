@@ -7,7 +7,7 @@ import discord
 import discord.ext.commands as cmd
 
 import database as db
-import system
+import utils
 
 logger = db.get_logger(__name__)
 
@@ -97,7 +97,7 @@ class EpicGames(cmd.Cog):
 
     @epic_cmds.command()
     @cmd.check(epic_check)
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def add_notif(
             self,
             ctx: discord.ApplicationContext):
@@ -107,7 +107,7 @@ class EpicGames(cmd.Cog):
             to = ctx.author
         to_notif = FreeNotifications(to.id)
         await to_notif.save()
-        await ctx.respond(embed=system.make_embed(
+        await ctx.respond(embed=utils.make_embed(
             title='Notifications Added',
             desc=f'Messages for free games on The Epic Games Store '
                  f'will now be sent here.'
@@ -122,7 +122,7 @@ class EpicGames(cmd.Cog):
 
     @epic_cmds.command()
     @cmd.check(epic_check)
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def rm_notif(
             self,
             ctx: discord.ApplicationContext):
@@ -130,7 +130,7 @@ class EpicGames(cmd.Cog):
         if isinstance(to := ctx.channel, discord.PartialMessageable):
             to = ctx.author
         await FreeNotifications.delete(to.id)
-        await ctx.respond(embed=system.make_embed(
+        await ctx.respond(embed=utils.make_embed(
             title='Notifications Removed',
             desc=f'Messages for free games on The Epic Games Store '
                  f'will now not be sent here.'
@@ -164,7 +164,7 @@ async def get_game_embeds(
                 url = None
             image = game.image_url or None
             embeds.append(
-                system.make_embed(
+                utils.make_embed(
                     title=f'`{game.name}` is Free on The Epic Games Store',
                     desc=game.desc,
                     url=url,
@@ -180,13 +180,13 @@ async def get_game_embeds(
                     inline=True
                 ).add_field(
                     name='Start Time',
-                    value=f'{system.get_time_str(game.start, "f")}\n'
-                          f'({system.get_time_str(game.start, "R")})',
+                    value=f'{utils.format_dt(game.start, "f")}\n'
+                          f'({utils.format_dt(game.start, "R")})',
                     inline=True
                 ).add_field(
                     name='End Time',
-                    value=f'{system.get_time_str(game.end, "f")}\n'
-                          f'({system.get_time_str(game.end, "R")})',
+                    value=f'{utils.format_dt(game.end, "f")}\n'
+                          f'({utils.format_dt(game.end, "R")})',
                     inline=True
                 )
             )
@@ -204,7 +204,7 @@ async def games_check_loop(bot: cmd.Bot):
             embeds = await get_game_embeds(fetched_games, last_update)
             for n in notif:
                 if (channel := bot.get_channel(n.snowflake)) is None:
-                    channel = await system.get_dm(n.snowflake, bot)
+                    channel = await utils.get_dm(n.snowflake, bot)
                 tg.create_task(channel.send(embeds=embeds))
         last_update = dt.datetime.now(tz=dt.timezone.utc)
         sleep = next_update - last_update
