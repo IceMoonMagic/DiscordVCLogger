@@ -295,26 +295,11 @@ async def delete(data_type: type[S], **where):
     await _write_db(command, data_type.temp)
 
 
-async def _update_row(data: Storable):
-    command = f'UPDATE {data.table_name} SET '
-    # for attribute in data.__annotations__:
-    #     if isinstance(val := getattr(data, attribute), str):
-    #         command += f'{attribute} = "{val}", '
-    #     else:
-    #         command += f'{attribute} = {val}, '
+async def save_data(data: Storable, *, assume_exists: bool = False):
+    # ToDo: update table if exists but different schema
+    assume_exists or await make_table_if_not_exist(data)
 
-    for attribute in data.__annotations__:
-        val = getattr(data, attribute)
-        command += f'{attribute} = '
-        command += f'"{val}", ' if isinstance(val, str) else f'{val}, '
-
-    command = f'{command[:-2]} WHERE {data.primary_key_name} = ' \
-              f'{getattr(data, data.primary_key_name)}'
-    await _write_db(command, data.temp)
-
-
-async def _insert_row(data: Storable):
-    header = f'INSERT INTO {data.table_name} ('
+    header = f'INSERT OR REPLACE INTO {data.table_name} ('
     values = 'VALUES ('
     for attribute in data.__annotations__:
         header += f'{attribute}, '
@@ -325,16 +310,6 @@ async def _insert_row(data: Storable):
     command = f'{header[:-2]}) {values[:-2]});'
 
     await _write_db(command, data.temp)
-
-
-async def save_data(data: Storable, *, assume_exists: bool = False):
-    # ToDo: update table if exists but different schema
-    assume_exists or await make_table_if_not_exist(data)
-    where = f'{data.primary_key_name} = {getattr(data, data.primary_key_name)}'
-    if len(await load_data_all(data.__class__, where=where)) == 0:
-        await _insert_row(data)
-    else:
-        await _update_row(data)
 
 
 def _generate_where(**where) -> str:
