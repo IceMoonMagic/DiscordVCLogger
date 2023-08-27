@@ -224,10 +224,12 @@ async def fetch_free_games() -> tuple[list[FreeGame], dt.datetime]:
     for game in games_raw:
         if len(promotions := game['promotions']['promotionalOffers']) == 0:
             promotions = game['promotions']['upcomingPromotionalOffers']
-        start = dt.datetime.fromisoformat(
-            promotions[0]['promotionalOffers'][0]['startDate'])
-        end = dt.datetime.fromisoformat(
-            promotions[0]['promotionalOffers'][0]['endDate'])
+        promotions = promotions[0]['promotionalOffers'][0]
+        if promotions['discountSetting']['discountPercentage'] != 0:
+            continue
+
+        start = dt.datetime.fromisoformat(promotions['startDate'])
+        end = dt.datetime.fromisoformat(promotions['endDate'])
 
         for img in game['keyImages']:
             if img['type'] == 'OfferImageWide':
