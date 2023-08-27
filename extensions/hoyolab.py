@@ -8,7 +8,7 @@ import genshin
 from discord.ext.tasks import loop
 
 import database as db
-import system
+import utils
 
 logger = db.get_logger(__name__)
 
@@ -87,7 +87,7 @@ class CookieModal(discord.ui.Modal):
         except genshin.CookieException:
             await interaction.followup.send(
                 ephemeral=True,
-                embed=system.make_error(
+                embed=utils.make_error(
                     'Invalid Cookie Data',
                     'The cookie data you entered '
                     'did not work and was discarded.'))
@@ -128,14 +128,14 @@ class HoyoLab(cmd.Cog):
     async def unlock_reminder(self):
         if HoyoLabData.box is None:
             for user_id in self.bot.owner_ids or [self.bot.owner_id]:
-                dm = await system.get_dm(user_id, self.bot)
-                await dm.send(embed=system.make_embed(
+                dm = await utils.get_dm(user_id, self.bot)
+                await dm.send(embed=utils.make_embed(
                     'Unlock HoyoLabData',
                     'The bot is ready, but HoyoLabData '
                     'still can\'t be encrypted/decrypted.'))
 
     @daily_rewards_cmds.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def redeem_daily(self, ctx: discord.ApplicationContext, game: game_selection):
         """
         Manually redeem your daily check-in.
@@ -150,7 +150,7 @@ class HoyoLab(cmd.Cog):
         await ctx.respond(embed=await _redeem_daily(client))
 
     @redeem_codes_cmds.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def redeem(self, ctx: discord.ApplicationContext, code: str, game: game_selection):
         """
         Redeem a code for yourself.
@@ -169,7 +169,7 @@ class HoyoLab(cmd.Cog):
         await ctx.respond(embed=await _redeem_code(client, code))
 
     @redeem_codes_cmds.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def share(self, ctx: discord.ApplicationContext, code: str, game: game_selection):
         """
         Redeem a code for everyone with `auto_codes` enabled.
@@ -188,7 +188,7 @@ class HoyoLab(cmd.Cog):
             return
         if not (embed := await _redeem_code(client, code)) and \
                 'claimed' not in embed.description:
-            await ctx.respond(embed=system.make_embed(
+            await ctx.respond(embed=utils.make_embed(
                 'Code Share Aborted',
                 f'Not sharing code due to the following error:\n'
                 f'>>> {embed.description}',
@@ -197,26 +197,26 @@ class HoyoLab(cmd.Cog):
 
         with asyncio.TaskGroup() as tg:
             if (await HoyoLabData.load(ctx.author.id)).notif_codes:
-                tg.create_task(system.send_dm(ctx.author.id, ctx.bot, embed=embed))
+                tg.create_task(utils.send_dm(ctx.author.id, ctx.bot, embed=embed))
 
             async for person in HoyoLabData.load_gen(auto_codes=True):
                 if person.snowflake == ctx.author.id:
                     continue
 
                 client = _make_client(person)
-                tg.create_task(system.do_and_dm(
+                tg.create_task(utils.do_and_dm(
                     user_id=person.snowflake,
                     bot=ctx.bot,
                     coro=_redeem_code(client, code),
                     send=person.notif_codes))
 
-            tg.create_task(ctx.respond(embed=system.make_embed(
+            tg.create_task(ctx.respond(embed=utils.make_embed(
                 'Sharing Code',
                 f'`{code}` has been shared.',
                 ctx)))
 
     @configure_cmds.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def check(self, ctx: discord.ApplicationContext):
         """Check your settings and cookie status."""
         await ctx.defer(ephemeral=True)
@@ -224,23 +224,23 @@ class HoyoLab(cmd.Cog):
         await ctx.respond(embed=await _check(ctx.author.id, ctx))
 
     @configure_cmds.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def cookies(self, ctx: discord.ApplicationContext):
         """Set your HoyoLab cookies."""
         await ctx.send_modal(CookieModal(title='HoyoLab Cookies', bot=ctx.bot))
 
     @configure_cmds.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def delete(self, ctx: discord.ApplicationContext):
         await ctx.defer(ephemeral=True)
         await HoyoLabData.delete(ctx.author.id)
-        await ctx.respond(embed=system.make_embed(
+        await ctx.respond(embed=utils.make_embed(
             'Data Deleted',
             'Your settings and HoyoLab cookies have been deleted.',
             ctx))
 
     @configure_cmds.command()
-    @system.autogenerate_options
+    @utils.autogenerate_options
     async def settings(self, ctx: discord.ApplicationContext,
                        auto_daily: bool = None,
                        auto_codes: bool = None,
@@ -275,14 +275,14 @@ class HoyoLab(cmd.Cog):
     @cmd.is_owner()
     @genshin_cmds.command()
     async def unlock(self, ctx: discord.ApplicationContext):
-        await ctx.send_modal(system.UnlockModal(HoyoLabData))
+        await ctx.send_modal(utils.UnlockModal(HoyoLabData))
 
     @cmd.is_owner()
     @genshin_cmds.command()
     async def lock(self, ctx: discord.ApplicationContext):
         HoyoLabData.clear_key()
         await ctx.respond(
-            embed=system.make_embed('HoyoLabData Locked', ctx=ctx),
+            embed=utils.make_embed('HoyoLabData Locked', ctx=ctx),
             ephemeral=True)
 
     @cmd.is_owner()
@@ -306,10 +306,10 @@ def _make_client(
 async def _get_client(
         snowflake: int,
         game: genshin.Game = genshin.Game.GENSHIN) -> \
-        genshin.Client | system.ErrorEmbed:
+        genshin.Client | utils.ErrorEmbed:
     if isinstance(data := await HoyoLabData.load(snowflake), HoyoLabData):
         return _make_client(data, game)
-    return system.make_error(
+    return utils.make_error(
         'Failed to Retrieve User Data',
         'Please configure your information using '
         '`/genshin configure cookies`.')
@@ -322,7 +322,7 @@ async def _redeem_daily(
     failed_to_claim = f'Failed to claim daily rewards for {client.game.name}'
     try:
         reward = await client.claim_daily_reward()
-        embed = system.make_embed(
+        embed = utils.make_embed(
             'Daily Rewards Claimed',
             f'{reward.amount}x {reward.name}', ctx)
         embed.set_thumbnail(url=reward.icon)
@@ -330,16 +330,16 @@ async def _redeem_daily(
                          icon_url=CHECKIN_ICON)
         return embed
     except genshin.AlreadyClaimed:
-        return system.make_error(
+        return utils.make_error(
             'Daily Rewards Already Claimed',
             f'{failed_to_claim} as '
             'they have already been claimed.')
     except genshin.InvalidCookies:
-        return system.make_error(
+        return utils.make_error(
             'Invalid Cookies',
             f'{failed_to_claim} as saved cookies are invalid')
     except genshin.GeetestTriggered:
-        return system.make_error(
+        return utils.make_error(
             'Geetest Triggered',
             f'{failed_to_claim} as '
             'a GeeTest Captcha was triggered. '
@@ -347,7 +347,7 @@ async def _redeem_daily(
             'For now, you will have to manually redeem them at '
             '[HoyoLab](www.hoyolab.com).')
     except Exception as e:
-        return system.make_error(
+        return utils.make_error(
             'Unknown Exception',
             f'{failed_to_claim}. Unknown exception `{type(e)}')
 
@@ -360,7 +360,7 @@ async def auto_redeem_daily(bot: cmd.Bot):
 
     async def _auto_redeem_daily(**kwargs):
         await asyncio.sleep(randint(0, 900))
-        await system.do_and_dm(**kwargs)
+        await utils.do_and_dm(**kwargs)
 
     async with asyncio.TaskGroup() as tg:
         async for person in HoyoLabData.load_gen(auto_daily=True):
@@ -375,25 +375,25 @@ async def auto_redeem_daily(bot: cmd.Bot):
 
 async def _redeem_code(
         client: genshin.Client, code: str, tries: int = 0) \
-        -> discord.Embed | system.ErrorEmbed:
+        -> discord.Embed | utils.ErrorEmbed:
     try:
         await client.redeem_code(code)
-        return system.make_embed(
+        return utils.make_embed(
             'Successfully Redeemed Code',
             f'Successfully redeemed `{code}`.')
     except genshin.RedemptionInvalid as e:
-        return system.make_error(
+        return utils.make_error(
             'Failed to Redeem Code',
             f'Could not redeem `{code}`. {e.msg}')
     except genshin.RedemptionClaimed:
-        return system.make_error(
+        return utils.make_error(
             'Failed to Redeem Code',
             f'Code `{code}` claimed already.')
     except genshin.RedemptionCooldown:
         if tries < 3:
             await asyncio.sleep(tries + 1)
             return await _redeem_code(client, code, tries + 1)
-        return system.make_error(
+        return utils.make_error(
             'Failed to Redeem Code',
             f'Redemption on cooldown.\nCode: `{code}`')
 
@@ -401,19 +401,19 @@ async def _redeem_code(
 async def _check(user_id: int,
                  ctx: discord.ApplicationContext = None, *,
                  color: discord.Color = None) \
-        -> discord.Embed | system.ErrorEmbed:
+        -> discord.Embed | utils.ErrorEmbed:
     if not (client := await _get_client(user_id)):
-        return system.make_error(
+        return utils.make_error(
             'No Data Present',
             'Your HoyoLab cookies are not saved.')
     try:
         check = await client.get_game_accounts()
     except genshin.CookieException:
-        return system.make_error(
+        return utils.make_error(
             'Invalid Cookie Data',
             'Unable to login to HoyoLab with your cookies.')
 
-    embed = system.make_embed(
+    embed = utils.make_embed(
         'Account Successfully Connected', '', ctx=ctx, color=color)
     for account in check:
         values = ''

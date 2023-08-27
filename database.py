@@ -22,7 +22,7 @@ def setup_logging(to_stdout: bool = True,
     root_logger = logging.getLogger()
     local_logger = logging.getLogger(LOG_NAME)
 
-    now = dt.datetime.utcnow().astimezone(dt.timezone.utc)
+    now = dt.datetime.now(tz=dt.timezone.utc)
     os.makedirs('logs', exist_ok=True)
 
     root_error_handler = RotatingFileHandler(
@@ -86,6 +86,7 @@ class Storable:
     table_name = 'Storable'
     primary_key_name = 'table_name'
     temp: bool = False
+    _table_confirmed = None
 
     encrypt_attrs: list = []
     box: nacl.secret.SecretBox | None = None
@@ -135,7 +136,8 @@ class Storable:
         encrypted = {}
         unique_chars: int = len(str(len(self.encrypt_attrs)))
         primary_value = f'{getattr(self, self.primary_key_name)}'
-        nonce_base = f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
+        nonce_base = \
+            f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
         for i, attr in enumerate(self.encrypt_attrs):
             nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
 
@@ -144,7 +146,11 @@ class Storable:
             encrypted_value = self.box.encrypt(bytes_value, nonce).ciphertext
             encrypted[attr] = encrypted_value.hex()
 
-        await save_data(self.update(update_inplace=False, **encrypted))
+        await self._wait_for_table()
+        await save_data(
+            self.update(update_inplace=False, **encrypted),
+            assume_exists=True
+        )
 
     def decrypt(self: S, decrypt_inplace: bool = True) -> S:
         work_on: S = self if decrypt_inplace else self.copy()
@@ -154,7 +160,8 @@ class Storable:
 
         unique_chars: int = len(str(len(work_on.encrypt_attrs)))
         primary_value = f'{getattr(work_on, work_on.primary_key_name)}'
-        nonce_base = f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
+        nonce_base = \
+            f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
         for i, attr in enumerate(work_on.encrypt_attrs):
             nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
 
@@ -196,6 +203,16 @@ class Storable:
         await delete(cls, **where)
 
     @classmethod
+    async def _wait_for_table(cls):
+        if cls._table_confirmed is None:
+            cls._table_confirmed = asyncio.create_task(
+                make_table_if_not_exist(cls),
+                name=f'Make {cls.table_name}'
+            )
+        await cls._table_confirmed
+        return
+
+    @classmethod
     def is_ready(cls) -> bool:
         return len(cls.encrypt_attrs) == 0 or cls.box is not None
 
@@ -220,14 +237,11 @@ class MissingEncryptionKey(RuntimeError):
 
 
 async def does_table_exist(table_name, temp: bool) -> bool:
-    # ToDo: LBYL instead of EAFP
     async with sql.connect(get_db_file(temp)) as db:
-        try:
-            await db.execute(f'SELECT * FROM {table_name}')
-            return True
-        except sql.OperationalError as e:
-            logger.debug(e)
-            return False
+        command = f'SELECT sql FROM sqlite_master WHERE name = "{table_name}"'
+        logger.debug(command)
+        table_sql = await db.execute_fetchall(command)
+        return bool(table_sql)
 
 
 def get_temp_file() -> str:
@@ -243,6 +257,7 @@ def get_db_file(temp: bool) -> str:
         return get_temp_file()
     return DB_FILE
 
+
 def delete_temp_file():
     # ToDo: Temp file if program is unnaturally canceled
     global TEMP_FILE
@@ -251,7 +266,7 @@ def delete_temp_file():
         TEMP_FILE = None
 
 
-async def make_table(blueprint: Storable):
+async def make_table(blueprint: Storable | type[Storable]):
     command = f'CREATE TABLE {blueprint.table_name} ('
     for var, var_type in blueprint.__annotations__.items():
         command += f'{var} {SQL_CAST[var_type]}, '
@@ -259,7 +274,7 @@ async def make_table(blueprint: Storable):
     await _write_db(command, blueprint.temp)
 
 
-async def make_table_if_not_exist(blueprint: Storable):
+async def make_table_if_not_exist(blueprint: Storable | type[Storable]):
     if not await does_table_exist(blueprint.table_name, blueprint.temp):
         await make_table(blueprint)
 
@@ -280,30 +295,11 @@ async def delete(data_type: type[S], **where):
     await _write_db(command, data_type.temp)
 
 
-async def _update_row(data: Storable):
-    await make_table_if_not_exist(data)
+async def save_data(data: Storable, *, assume_exists: bool = False):
+    # ToDo: update table if exists but different schema
+    assume_exists or await make_table_if_not_exist(data)
 
-    command = f'UPDATE {data.table_name} SET '
-    # for attribute in data.__annotations__:
-    #     if isinstance(val := getattr(data, attribute), str):
-    #         command += f'{attribute} = "{val}", '
-    #     else:
-    #         command += f'{attribute} = {val}, '
-
-    for attribute in data.__annotations__:
-        val = getattr(data, attribute)
-        command += f'{attribute} = '
-        command += f'"{val}", ' if isinstance(val, str) else f'{val}, '
-
-    command = f'{command[:-2]} WHERE {data.primary_key_name} = ' \
-              f'{getattr(data, data.primary_key_name)}'
-    await _write_db(command, data.temp)
-
-
-async def _insert_row(data: Storable):
-    await make_table_if_not_exist(data)
-
-    header = f'INSERT INTO {data.table_name} ('
+    header = f'INSERT OR REPLACE INTO {data.table_name} ('
     values = 'VALUES ('
     for attribute in data.__annotations__:
         header += f'{attribute}, '
@@ -314,22 +310,6 @@ async def _insert_row(data: Storable):
     command = f'{header[:-2]}) {values[:-2]});'
 
     await _write_db(command, data.temp)
-
-
-async def save_data(data: Storable):
-    # ToDo: update table if exists but different schema
-    await make_table_if_not_exist(data)
-    where = f'{data.primary_key_name} = {getattr(data, data.primary_key_name)}'
-    if len(await load_data_all(data.__class__, where=where)) == 0:
-        await _insert_row(data)
-    else:
-        await _update_row(data)
-
-
-async def save_datas(datas: Iterable[Storable]):
-    async with asyncio.TaskGroup() as tg:
-        for data in datas:
-            tg.create_task(save_data(data))
 
 
 def _generate_where(**where) -> str:
