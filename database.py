@@ -65,9 +65,12 @@ def get_logger(name) -> logging.Logger:
     return logging.getLogger(f'{LOG_NAME}.{name}')
 
 
-def get_json_data() -> dict:
+def get_json_data(key: str = '') -> dict:
     with open(JSON_PATH) as file:
-        return json.load(file)
+        data = json.load(file)
+    for k in key.split('.'):
+        data = data.get(k, {})
+    return data
 
 
 JSON_PATH = r'saves/bot_key.json'

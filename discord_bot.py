@@ -26,18 +26,16 @@ def main():
 
     bot = cmd.Bot()
 
-    bot_info = db.get_json_data()
-    bot.owner_ids = bot_info['owners']
+    bot_info = db.get_json_data(__name__)
+    bot.owner_ids = bot_info.get('owners', [])
     key = bot_info['key']
-    del bot_info
 
     bot.load_extensions(
         'system',
-        'extensions.hoyolab',
-        'extensions.vc_log',
-        'extensions.misc',
-        'extensions.epic_games',
+        *bot_info.get('extensions', [])
     )
+
+    del bot_info
 
     bot.run(key)
     db.delete_temp_file()

@@ -292,7 +292,7 @@ class HoyoLab(cmd.Cog):
         await auto_redeem_daily(ctx.bot)
 
 
-CHECKIN_ICON = db.get_json_data()['check-in icon']
+CHECKIN_ICON = db.get_json_data(__name__).get('check-in icon', '')
 
 
 def _make_client(

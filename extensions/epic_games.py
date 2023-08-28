@@ -24,12 +24,11 @@ def teardown(bot: cmd.Bot):
     bot.remove_cog(EpicGames.qualified_name)
 
 
-EPIC_FREE_PROMOTIONS_URL = \
-    (r'https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions?'
-     r'locale=en-US&country=US&allowCountries=US')
-EPIC_STORE_HOME = r'https://www.epicgames.com'
-EPIC_ICON = r'https://cdn2.steamgriddb.com/file/sgdb-cdn/icon/' \
-            r'1d7b813d77ada92b4c5998ec42a3cde9.png'
+epic_json = db.get_json_data(__name__)
+EPIC_FREE_PROMOTIONS_URL = epic_json.get('promotions url', '')
+EPIC_STORE_HOME = epic_json.get('store home', '')
+EPIC_ICON = epic_json.get('store icon', '')
+del epic_json
 
 
 @dc.dataclass(frozen=True)

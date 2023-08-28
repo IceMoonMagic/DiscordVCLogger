@@ -21,7 +21,7 @@ def teardown(bot: cmds.Bot):
 
 class MiscCommands(cmds.Cog):
 
-    link_fixes: dict = db.get_json_data().get('link_fixes', {})
+    link_fixes: dict = db.get_json_data(__name__).get('link fixes', {})
 
     @discord.message_command(name='Convert Links')
     async def fix_links(
