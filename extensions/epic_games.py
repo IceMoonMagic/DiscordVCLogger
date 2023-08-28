@@ -54,6 +54,38 @@ class FreeGame(db.Storable):
     @property
     def active(self) -> bool:
         return self.start <= dt.datetime.now(tz=dt.timezone.utc) < self.end
+    
+    def embed(self) -> discord.Embed:
+        if self.page_url:
+            url = f'{EPIC_STORE_HOME}/p/{self.page_url}'
+        else:
+            url = None
+        image = self.image_url or None
+        return utils.make_embed(
+                title=f'`{self.name}`',
+                desc=self.desc,
+                url=url,
+            ).set_author(
+                name='Free on the Epic Games Store',
+                url=EPIC_STORE_HOME,
+                icon_url=EPIC_ICON
+            ).set_image(
+                url=image
+            ).add_field(
+                name='Normally',
+                value=self.price_str,
+                inline=True
+            ).add_field(
+                name='Start Time',
+                value=f'{utils.format_dt(self.start, "f")}\n'
+                      f'({utils.format_dt(self.start, "R")})',
+                inline=True
+            ).add_field(
+                name='End Time',
+                value=f'{utils.format_dt(self.end, "f")}\n'
+                      f'({utils.format_dt(self.end, "R")})',
+                inline=True
+            )
 
 
 @dc.dataclass
@@ -62,10 +94,32 @@ class FreeNotifications(db.Storable):
     table_name = 'EpicGamesNotifications'
 
     discord_snowflake: int
+    last_update: dt.datetime = dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
 
     @property
     def snowflake(self) -> int:
         return self.discord_snowflake
+
+    async def send_games(
+            self,
+            bot: cmd.Bot,
+            games: list[FreeGame]
+    ):
+        if (channel := bot.get_channel(self.snowflake)) is None:
+            channel = await utils.get_dm(self.snowflake, bot)
+        embeds = []
+        for game in games:
+            if game.active and game.start > self.last_update:
+                embeds.append(game.embed())
+        self.last_update = utils.utcnow()
+        if len(embeds) > 0:
+            try:
+                if isinstance(channel, discord.Thread) and channel.me is None:
+                    await channel.join()
+                await channel.send(embeds=embeds)
+            except (discord.HTTPException, discord.Forbidden) as e:
+                pass
+        await self.save()
 
 
 class EpicGames(cmd.Cog):
@@ -115,10 +169,10 @@ class EpicGames(cmd.Cog):
         if self.check_loop is None or self.check_loop.done():
             self.check_loop = asyncio.create_task(games_check_loop(self.bot))
         else:
-            await ctx.respond(embeds=await get_game_embeds(
-                games=await FreeGame.load_all(),
-                last_notif=dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
-            ))
+            await to_notif.send_games(
+                bot=ctx.bot,
+                games=await FreeGame.load_all()
+            )
 
     @epic_cmds.command()
     @cmd.check(epic_check)
@@ -145,69 +199,19 @@ class EpicGames(cmd.Cog):
             games, _ = await fetch_free_games()
         else:
             games = await FreeGame.load_all()
-        await ctx.respond(embeds=await get_game_embeds(
-            games=games,
-            last_notif=dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
-        ))
-
-
-async def get_game_embeds(
-        games: list[FreeGame],
-        last_notif: dt.datetime
-) -> list[discord.Embed]:
-    embeds: list[discord.Embed] = []
-    for game in games:
-        if game.start > last_notif and game.active:
-            if game.page_url:
-                url = f'{EPIC_STORE_HOME}/p/{game.page_url}'
-            else:
-                url = None
-            image = game.image_url or None
-            embeds.append(
-                utils.make_embed(
-                    title=f'`{game.name}` is Free on The Epic Games Store',
-                    desc=game.desc,
-                    url=url,
-                ).set_author(
-                    name='The Epic Games Store',
-                    url=EPIC_STORE_HOME,
-                    icon_url=EPIC_ICON
-                ).set_image(
-                    url=image
-                ).add_field(
-                    name='Normally',
-                    value=game.price_str,
-                    inline=True
-                ).add_field(
-                    name='Start Time',
-                    value=f'{utils.format_dt(game.start, "f")}\n'
-                          f'({utils.format_dt(game.start, "R")})',
-                    inline=True
-                ).add_field(
-                    name='End Time',
-                    value=f'{utils.format_dt(game.end, "f")}\n'
-                          f'({utils.format_dt(game.end, "R")})',
-                    inline=True
-                )
-            )
-    return embeds
+        await ctx.respond(embeds=[g.embed() for g in games if g.active])
 
 
 async def games_check_loop(bot: cmd.Bot):
-    last_update = dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
     while len(notif := await FreeNotifications.load_all()) > 0:
         fetched_games, next_update = await fetch_free_games()
         await FreeGame.delete_all()
         for game in fetched_games:
             await game.save()
         async with asyncio.TaskGroup() as tg:
-            embeds = await get_game_embeds(fetched_games, last_update)
             for n in notif:
-                if (channel := bot.get_channel(n.snowflake)) is None:
-                    channel = await utils.get_dm(n.snowflake, bot)
-                tg.create_task(channel.send(embeds=embeds))
-        last_update = dt.datetime.now(tz=dt.timezone.utc)
-        sleep = next_update - last_update
+                tg.create_task(n.send_games(bot, fetched_games))
+        sleep = next_update - utils.utcnow()
         await asyncio.sleep(sleep.total_seconds())
 
 
