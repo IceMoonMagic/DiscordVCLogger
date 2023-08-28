@@ -33,7 +33,7 @@ def main():
 
     bot.load_extensions(
         'system',
-        # 'extensions.hoyolab',
+        'extensions.hoyolab',
         'extensions.vc_log',
         'extensions.misc',
         'extensions.epic_games',
