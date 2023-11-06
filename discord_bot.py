@@ -8,13 +8,12 @@ import database as db
 
 def make_argparse() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument('-q', '--quiet', action='store_true')
-    parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument("-q", "--quiet", action="store_true")
+    parser.add_argument("-d", "--debug", action="store_true")
     return parser
 
 
 def main():
-
     args = make_argparse().parse_args()
 
     db.setup_logging(
@@ -27,21 +26,17 @@ def main():
     bot = cmd.Bot()
 
     bot_info = db.get_json_data(__name__)
-    bot.owner_ids = bot_info.get('owners', [])
-    key = bot_info['key']
+    bot.owner_ids = bot_info.get("owners", [])
+    key = bot_info["key"]
 
-    bot.load_extensions(
-        'system',
-        *bot_info.get('extensions', [])
-    )
+    bot.load_extensions("system", *bot_info.get("extensions", []))
 
     del bot_info
 
     bot.run(key)
     db.delete_temp_file()
-    logger.info('Shutdown Complete, End of Process')
+    logger.info("Shutdown Complete, End of Process")
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     main()

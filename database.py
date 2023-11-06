@@ -14,34 +14,41 @@ import aiosqlite as sql
 import nacl.secret
 
 
-def setup_logging(to_stdout: bool = True,
-                  local_level: int = logging.INFO,
-                  root_level: int = logging.WARNING):
+def setup_logging(
+    to_stdout: bool = True,
+    local_level: int = logging.INFO,
+    root_level: int = logging.WARNING,
+):
     logging.Formatter.converter = time.gmtime
 
     root_logger = logging.getLogger()
     local_logger = logging.getLogger(LOG_NAME)
 
     now = dt.datetime.now(tz=dt.timezone.utc)
-    os.makedirs('logs', exist_ok=True)
+    os.makedirs("logs", exist_ok=True)
 
     root_error_handler = RotatingFileHandler(
         f'logs/{now.strftime(LOG_NAME + "_notable_root")}.log',
         maxBytes=524288,
-        backupCount=3)
+        backupCount=3,
+    )
     local_error_handler = RotatingFileHandler(
         f'logs/{now.strftime(LOG_NAME + "_notable_local")}.log',
         maxBytes=524288,
-        backupCount=3)
+        backupCount=3,
+    )
     standard_log_handler = RotatingFileHandler(
         f'logs/{now.strftime(LOG_NAME + "_standard")}.log',
         maxBytes=524288,
-        backupCount=3)
+        backupCount=3,
+    )
     console_handler = logging.StreamHandler(sys.stdout)
 
     formatter = logging.Formatter(
-        '{asctime}|{levelname}|{lineno}|{name}|{message}',
-        '%Y-%m-%d %H:%M:%S', "{")
+        "{asctime}|{levelname}|{lineno}|{name}|{message}",
+        "%Y-%m-%d %H:%M:%S",
+        "{",
+    )
 
     root_error_handler.setFormatter(formatter)
     local_error_handler.setFormatter(formatter)
@@ -62,32 +69,32 @@ def setup_logging(to_stdout: bool = True,
 
 
 def get_logger(name) -> logging.Logger:
-    return logging.getLogger(f'{LOG_NAME}.{name}')
+    return logging.getLogger(f"{LOG_NAME}.{name}")
 
 
-def get_json_data(key: str = '') -> dict:
+def get_json_data(key: str = "") -> dict:
     with open(JSON_PATH) as file:
         data = json.load(file)
-    for k in key.split('.'):
+    for k in key.split("."):
         data = data.get(k, {})
     return data
 
 
-JSON_PATH = r'saves/bot_key.json'
+JSON_PATH = r"saves/bot_key.json"
 
-LOG_NAME = 'discord_bot'
+LOG_NAME = "discord_bot"
 logger = get_logger(__name__)
 
-DB_FILE = r'saves/database.db'
+DB_FILE = r"saves/database.db"
 TEMP_FILE = None
-SQL_CAST = {bool: 'bool', int: 'int', str: 'nvarchar', dt.datetime: 'datetime'}
+SQL_CAST = {bool: "bool", int: "int", str: "nvarchar", dt.datetime: "datetime"}
 
-S = TypeVar("S", bound='Storable')
+S = TypeVar("S", bound="Storable")
 
 
 class Storable:
-    table_name = 'Storable'
-    primary_key_name = 'table_name'
+    table_name = "Storable"
+    primary_key_name = "table_name"
     temp: bool = False
     _table_confirmed = None
 
@@ -99,13 +106,16 @@ class Storable:
             cls.table_name = cls.__name__
 
         if cls.primary_key_name not in cls.__annotations__:
-            raise AttributeError(f'{cls.__class__} has no annotation '
-                                 f'{cls.primary_key_name}. Available: '
-                                 f'{list[cls.__annotations__]}')
+            raise AttributeError(
+                f"{cls.__class__} has no annotation "
+                f"{cls.primary_key_name}. Available: "
+                f"{list[cls.__annotations__]}"
+            )
         if cls.primary_key_name in cls.encrypt_attrs:
             raise AttributeError(
-                f'primary_key_name ({cls.primary_key_name}) '
-                f'may not be encrypted.')
+                f"primary_key_name ({cls.primary_key_name}) "
+                f"may not be encrypted."
+            )
         super().__init_subclass__()
 
     def __post_init__(self: S) -> S:
@@ -113,7 +123,8 @@ class Storable:
             if not isinstance(value := getattr(self, attr), type_):
                 if type_ == dt.datetime:
                     object.__setattr__(
-                        self, attr, dt.datetime.fromisoformat(value))
+                        self, attr, dt.datetime.fromisoformat(value)
+                    )
                 else:
                     object.__setattr__(self, attr, type_(value))
         return self
@@ -124,9 +135,7 @@ class Storable:
             attributes[attribute] = getattr(self, attribute)
         return self.__class__(**attributes)
 
-    def update(self: S, *,
-               update_inplace: bool = True,
-               **kwargs) -> S:
+    def update(self: S, *, update_inplace: bool = True, **kwargs) -> S:
         work_on: S = self if update_inplace else self.copy()
         for kw, arg in kwargs.items():
             setattr(work_on, kw, arg)
@@ -138,11 +147,12 @@ class Storable:
 
         encrypted = {}
         unique_chars: int = len(str(len(self.encrypt_attrs)))
-        primary_value = f'{getattr(self, self.primary_key_name)}'
-        nonce_base = \
-            f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
+        primary_value = f"{getattr(self, self.primary_key_name)}"
+        nonce_base = (
+            f"{primary_value[:24 - unique_chars]:0{24 - unique_chars}}"
+        )
         for i, attr in enumerate(self.encrypt_attrs):
-            nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
+            nonce = f"{i:0{unique_chars}}{nonce_base}".encode()
 
             raw_value: str = getattr(self, attr)
             bytes_value = raw_value.encode()
@@ -151,8 +161,7 @@ class Storable:
 
         await self._wait_for_table()
         await save_data(
-            self.update(update_inplace=False, **encrypted),
-            assume_exists=True
+            self.update(update_inplace=False, **encrypted), assume_exists=True
         )
 
     def decrypt(self: S, decrypt_inplace: bool = True) -> S:
@@ -162,11 +171,12 @@ class Storable:
             raise MissingEncryptionKey(self.__class__)
 
         unique_chars: int = len(str(len(work_on.encrypt_attrs)))
-        primary_value = f'{getattr(work_on, work_on.primary_key_name)}'
-        nonce_base = \
-            f'{primary_value[:24 - unique_chars]:0{24 - unique_chars}}'
+        primary_value = f"{getattr(work_on, work_on.primary_key_name)}"
+        nonce_base = (
+            f"{primary_value[:24 - unique_chars]:0{24 - unique_chars}}"
+        )
         for i, attr in enumerate(work_on.encrypt_attrs):
-            nonce = f'{i:0{unique_chars}}{nonce_base}'.encode()
+            nonce = f"{i:0{unique_chars}}{nonce_base}".encode()
 
             hex_value: str = getattr(work_on, attr)
             bytes_value = bytes.fromhex(hex_value)
@@ -177,9 +187,10 @@ class Storable:
         return work_on
 
     @classmethod
-    async def load(cls: type[S], primary_key, decrypt: bool = True) \
-            -> S | None:
-        where = f'{cls.primary_key_name} = {primary_key}'
+    async def load(
+        cls: type[S], primary_key, decrypt: bool = True
+    ) -> S | None:
+        where = f"{cls.primary_key_name} = {primary_key}"
         try:
             obj = await anext(cls.load_gen(where=where, decrypt=decrypt))
         except StopAsyncIteration:
@@ -192,13 +203,14 @@ class Storable:
         return await load_data_all(cls, decrypt=decrypt, **where)
 
     @classmethod
-    def load_gen(cls: type[S], decrypt: bool = True, **where) \
-            -> AsyncGenerator[S, None]:
+    def load_gen(
+        cls: type[S], decrypt: bool = True, **where
+    ) -> AsyncGenerator[S, None]:
         return load_data_gen(cls, decrypt=decrypt, **where)
 
     @classmethod
     async def delete(cls, primary_key):
-        where = f'{cls.primary_key_name} = {primary_key}'
+        where = f"{cls.primary_key_name} = {primary_key}"
         await cls.delete_all(where=where)
 
     @classmethod
@@ -209,8 +221,7 @@ class Storable:
     async def _wait_for_table(cls):
         if cls._table_confirmed is None:
             cls._table_confirmed = asyncio.create_task(
-                make_table_if_not_exist(cls),
-                name=f'Make {cls.table_name}'
+                make_table_if_not_exist(cls), name=f"Make {cls.table_name}"
             )
         await cls._table_confirmed
         return
@@ -234,7 +245,7 @@ class MissingEncryptionKey(RuntimeError):
     def __init__(self, type_: type[Storable] | Storable, *args):
         type_ = type_.__class__ if isinstance(type_, Storable) else type_
         if len(args) == 0:
-            args = (f'Missing encryption key for {type_}',)
+            args = (f"Missing encryption key for {type_}",)
         super().__init__(*args)
         self.storable: Storable = type_
 
@@ -251,7 +262,7 @@ def get_temp_file() -> str:
     global TEMP_FILE
     if TEMP_FILE:
         return TEMP_FILE
-    fd, TEMP_FILE = tempfile.mkstemp(prefix=sys.argv[0][:-3], suffix='.db')
+    fd, TEMP_FILE = tempfile.mkstemp(prefix=sys.argv[0][:-3], suffix=".db")
     return TEMP_FILE
 
 
@@ -270,10 +281,10 @@ def delete_temp_file():
 
 
 async def make_table(blueprint: Storable | type[Storable]):
-    command = f'CREATE TABLE {blueprint.table_name} ('
+    command = f"CREATE TABLE {blueprint.table_name} ("
     for var, var_type in blueprint.__annotations__.items():
-        command += f'{var} {SQL_CAST[var_type]}, '
-    command += f'PRIMARY KEY ({blueprint.primary_key_name}) );'
+        command += f"{var} {SQL_CAST[var_type]}, "
+    command += f"PRIMARY KEY ({blueprint.primary_key_name}) );"
     await _write_db(command, blueprint.temp)
 
 
@@ -293,8 +304,9 @@ async def delete(data_type: type[S], **where):
     if not await does_table_exist(data_type.table_name, data_type.temp):
         return
 
-    command = f'DELETE FROM {data_type.table_name} ' \
-              f'{_generate_where(**where)}'
+    command = (
+        f"DELETE FROM {data_type.table_name} " f"{_generate_where(**where)}"
+    )
     await _write_db(command, data_type.temp)
 
 
@@ -302,45 +314,50 @@ async def save_data(data: Storable, *, assume_exists: bool = False):
     # ToDo: update table if exists but different schema
     assume_exists or await make_table_if_not_exist(data)
 
-    header = f'INSERT OR REPLACE INTO {data.table_name} ('
-    values = 'VALUES ('
+    header = f"INSERT OR REPLACE INTO {data.table_name} ("
+    values = "VALUES ("
     for attribute in data.__annotations__:
-        header += f'{attribute}, '
+        header += f"{attribute}, "
         if isinstance(val := getattr(data, attribute), (str, dt.datetime)):
             values += f'"{val}", '
         else:
-            values += f'{val}, '
-    command = f'{header[:-2]}) {values[:-2]});'
+            values += f"{val}, "
+    command = f"{header[:-2]}) {values[:-2]});"
 
     await _write_db(command, data.temp)
 
 
 def _generate_where(**where) -> str:
     if len(where) == 0:
-        return ''
-    elif len(where) == 1 and (key := next(iter(where))).upper() == 'WHERE':
-        return where[key] if 'where' in where[key].lower() \
-            else f'WHERE {where[key]}'
+        return ""
+    elif len(where) == 1 and (key := next(iter(where))).upper() == "WHERE":
+        return (
+            where[key]
+            if "where" in where[key].lower()
+            else f"WHERE {where[key]}"
+        )
 
-    command = 'WHERE '
+    command = "WHERE "
     for attr, val in where.items():
-        if attr.startswith('not_'):
-            command += 'NOT '
+        if attr.startswith("not_"):
+            command += "NOT "
             attr = attr[4:]
         if isinstance(val, Iterable) and not isinstance(val, str):
-            command += f'{attr} IN {tuple(val)} AND '
+            command += f"{attr} IN {tuple(val)} AND "
         else:
-            command += f'{attr}={val} AND '
-    return command[:-5].replace(',)', ')')
+            command += f"{attr}={val} AND "
+    return command[:-5].replace(",)", ")")
 
 
-async def load_data_all(data_type: type[S], decrypt: bool = True, **where) \
-        -> list[S]:
+async def load_data_all(
+    data_type: type[S], decrypt: bool = True, **where
+) -> list[S]:
     if not await does_table_exist(data_type.table_name, data_type.temp):
         return []
 
-    command = f'SELECT * FROM {data_type.table_name} ' \
-              f'{_generate_where(**where)}'
+    command = (
+        f"SELECT * FROM {data_type.table_name} " f"{_generate_where(**where)}"
+    )
     logger.debug(command)
     async with sql.connect(get_db_file(data_type.temp)) as db:
         results = await db.execute_fetchall(command)
@@ -349,13 +366,15 @@ async def load_data_all(data_type: type[S], decrypt: bool = True, **where) \
     return [data_type(*row) for row in results]
 
 
-async def load_data_gen(data_type: type[S], decrypt: bool = True, **where) \
-        -> AsyncGenerator[S, None]:
+async def load_data_gen(
+    data_type: type[S], decrypt: bool = True, **where
+) -> AsyncGenerator[S, None]:
     if not await does_table_exist(data_type.table_name, data_type.temp):
         return
 
-    command = f'SELECT * FROM {data_type.table_name} ' \
-              f'{_generate_where(**where)}'
+    command = (
+        f"SELECT * FROM {data_type.table_name} " f"{_generate_where(**where)}"
+    )
     logger.debug(command)
     async with sql.connect(get_db_file(data_type.temp)) as db:
         async with db.execute(command) as cursor:

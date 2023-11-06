@@ -17,50 +17,50 @@ VOICE_STATE_CHANNELS = discord.VoiceChannel | discord.StageChannel
 
 def setup(bot: cmds.Bot):
     """Adds the cog to the bot"""
-    logger.info('Loading Cog: VC Log')
+    logger.info("Loading Cog: VC Log")
     bot.add_cog(VcLog(bot))
 
 
 def teardown(bot: cmds.Bot):
     """Removes the cog from the bot"""
-    logger.info('Unloading Cog: VC Log')
-    bot.remove_cog(f'{VcLog.qualified_name}')
+    logger.info("Unloading Cog: VC Log")
+    bot.remove_cog(f"{VcLog.qualified_name}")
 
 
 class VoiceStateChange(enum.Enum):
-    server_deafen = 'deaf', True
-    server_undeafen = 'deaf', False
-    server_mute = 'mute', True
-    server_unmute = 'mute', False
-    self_deafen = 'self_deaf', True
-    self_undeafen = 'self_deaf', False
-    self_mute = 'self_mute', True
-    self_unmute = 'self_mute', False
-    start_stream = 'self_stream', True
-    end_stream = 'self_stream', False
-    start_video = 'self_video', True
-    end_video = 'self_video', False
-    suppressed = 'suppress', True
-    unsuppressed = 'suppress', False
-    speak_request_start = 'requested_to_speak_at', True
-    speak_request_end = 'requested_to_speak_at', False
-    enter_afk = 'afk', True
-    exit_afk = 'afk', False
-    channel_join = 'channel', True
-    channel_leave = 'channel', False
+    server_deafen = "deaf", True
+    server_undeafen = "deaf", False
+    server_mute = "mute", True
+    server_unmute = "mute", False
+    self_deafen = "self_deaf", True
+    self_undeafen = "self_deaf", False
+    self_mute = "self_mute", True
+    self_unmute = "self_mute", False
+    start_stream = "self_stream", True
+    end_stream = "self_stream", False
+    start_video = "self_video", True
+    end_video = "self_video", False
+    suppressed = "suppress", True
+    unsuppressed = "suppress", False
+    speak_request_start = "requested_to_speak_at", True
+    speak_request_end = "requested_to_speak_at", False
+    enter_afk = "afk", True
+    exit_afk = "afk", False
+    channel_join = "channel", True
+    channel_leave = "channel", False
 
     @property
-    def opposite(self) -> 'VoiceStateChange':
+    def opposite(self) -> "VoiceStateChange":
         """Get the VoiceStateChange that would 'undo' this one."""
         return self.__class__((self.value[0], not self.value[1]))
 
     @classmethod
     def find_changes(
-            cls: 'VoiceStateChange',
-            old_state: discord.VoiceState,
-            new_state: discord.VoiceState,
-            simplify: bool = False) \
-            -> list['VoiceStateChange']:
+        cls: "VoiceStateChange",
+        old_state: discord.VoiceState,
+        new_state: discord.VoiceState,
+        simplify: bool = False,
+    ) -> list["VoiceStateChange"]:
         """
         Find all the differences between two discord voice states.
 
@@ -70,14 +70,14 @@ class VoiceStateChange(enum.Enum):
         This removes self_(un)mute if self_(un)deafen is present.
         :return: The applicable VoiceStateChanges as a list.
         """
-        changes: list['VoiceStateChange'] = []
+        changes: list["VoiceStateChange"] = []
         for attr in old_state.__slots__[1:]:  # Skip 'guild_id'
             old_value = getattr(old_state, attr)
             new_value = getattr(new_state, attr)
             if old_value == new_value:
                 continue
 
-            if attr == 'channel':
+            if attr == "channel":
                 if old_value is not None:
                     changes.append(cls((attr, False)))
                 if new_value is not None:
@@ -96,7 +96,7 @@ class VoiceStateChange(enum.Enum):
 
 @dc.dataclass(frozen=True)
 class VoiceStateChangeLog(db.Storable):
-    primary_key_name = '_p_key'
+    primary_key_name = "_p_key"
     temp = True
 
     guild_id: int
@@ -108,15 +108,17 @@ class VoiceStateChangeLog(db.Storable):
 
     def __post_init__(self: db.S) -> db.S:
         if self._p_key is None:
-            object.__setattr__(self, '_p_key', hash(self))
+            object.__setattr__(self, "_p_key", hash(self))
         return super().__post_init__()
 
     def __hash__(self):
-        return hash(f'{self.guild_id}'
-                    f'{self.channel_id}'
-                    f'{self.user_id}'
-                    f'{self.change_name}'
-                    f'{self.time.timestamp()}')
+        return hash(
+            f"{self.guild_id}"
+            f"{self.channel_id}"
+            f"{self.user_id}"
+            f"{self.change_name}"
+            f"{self.time.timestamp()}"
+        )
 
     @property
     def change(self) -> VoiceStateChange:
@@ -144,12 +146,15 @@ class VcLog(cmds.Cog):
     async def force_scan_vcs(self, ctx: discord.ApplicationContext):
         ctx.defer()
         await _log_reconciliation(self.bot)
-        await ctx.respond(utils.make_embed(desc='Reconciled Logs', ctx=ctx))
+        await ctx.respond(utils.make_embed(desc="Reconciled Logs", ctx=ctx))
 
     @cmds.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member,
-                                    old_state: discord.VoiceState,
-                                    new_state: discord.VoiceState):
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        old_state: discord.VoiceState,
+        new_state: discord.VoiceState,
+    ):
         """
         Trigger to update list if someone joined or left VC
 
@@ -163,10 +168,14 @@ class VcLog(cmds.Cog):
 
     @log_command_group.command()
     @utils.autogenerate_options
-    async def joined(self, ctx: discord.ApplicationContext = None, *,
-                     channel: VOICE_STATE_CHANNELS | None = None,
-                     amount: int = -1,
-                     time_format: utils.time_format_option = 'R'):
+    async def joined(
+        self,
+        ctx: discord.ApplicationContext = None,
+        *,
+        channel: VOICE_STATE_CHANNELS | None = None,
+        amount: int = -1,
+        time_format: utils.time_format_option = "R",
+    ):
         # async def joined(self, ctx: discord.ApplicationContext):
         """
         Shows who has joined a VC and how long ago. Default to your VC.
@@ -177,21 +186,28 @@ class VcLog(cmds.Cog):
         :param time_format: The character for the discord timestamp
         """
         await ctx.defer()
-        await ctx.respond(embed=await _vc_log_embed(
-            ctx=ctx,
-            vsc_types=[VoiceStateChange.channel_join],
-            amount=amount,
-            channel=channel,
-            ignore_empty=False,
-            only_present=True,
-            time_format=time_format))
+        await ctx.respond(
+            embed=await _vc_log_embed(
+                ctx=ctx,
+                vsc_types=[VoiceStateChange.channel_join],
+                amount=amount,
+                channel=channel,
+                ignore_empty=False,
+                only_present=True,
+                time_format=time_format,
+            )
+        )
 
     @log_command_group.command()
     @utils.autogenerate_options
-    async def left(self, ctx: discord.ApplicationContext, *,
-                   channel: VOICE_STATE_CHANNELS | None = None,
-                   amount: int = -1,
-                   time_format: utils.time_format_option = 'R'):
+    async def left(
+        self,
+        ctx: discord.ApplicationContext,
+        *,
+        channel: VOICE_STATE_CHANNELS | None = None,
+        amount: int = -1,
+        time_format: utils.time_format_option = "R",
+    ):
         # async def left(self, ctx: discord.ApplicationContext):
         """
         Shows who have left a VC and how long ago. Defaults to your VC.
@@ -202,22 +218,31 @@ class VcLog(cmds.Cog):
         :param time_format: The character for the discord timestamp
         """
         await ctx.defer()
-        await ctx.respond(embed=await _vc_log_embed(
-            ctx=ctx,
-            vsc_types=[VoiceStateChange.channel_leave],
-            amount=amount,
-            channel=channel,
-            ignore_empty=False,
-            only_present=None,
-            time_format=time_format))
+        await ctx.respond(
+            embed=await _vc_log_embed(
+                ctx=ctx,
+                vsc_types=[VoiceStateChange.channel_leave],
+                amount=amount,
+                channel=channel,
+                ignore_empty=False,
+                only_present=None,
+                time_format=time_format,
+            )
+        )
 
     @log_command_group.command()
     @utils.autogenerate_options
-    async def all(self, ctx: discord.ApplicationContext, *,
-                  channel: VOICE_STATE_CHANNELS | None = None,
-                  amount: int = -1, ignore_empty: bool = True,
-                  remove_dupes: bool = True, remove_undo: bool = True,
-                  time_format: utils.time_format_option = 'R'):
+    async def all(
+        self,
+        ctx: discord.ApplicationContext,
+        *,
+        channel: VOICE_STATE_CHANNELS | None = None,
+        amount: int = -1,
+        ignore_empty: bool = True,
+        remove_dupes: bool = True,
+        remove_undo: bool = True,
+        time_format: utils.time_format_option = "R",
+    ):
         """
         Get all the logs from a VC. Defaults to your VC.
 
@@ -232,28 +257,35 @@ class VcLog(cmds.Cog):
         :param time_format: The time format to display the logs
         """
         await ctx.defer()
-        await ctx.respond(embed=await _vc_log_embed(
-            ctx=ctx,
-            amount=amount,
-            channel=channel,
-            ignore_empty=ignore_empty,
-            only_present=False,
-            remove_dupes=remove_dupes,
-            remove_undo=remove_undo,
-            time_format=time_format))
+        await ctx.respond(
+            embed=await _vc_log_embed(
+                ctx=ctx,
+                amount=amount,
+                channel=channel,
+                ignore_empty=ignore_empty,
+                only_present=False,
+                remove_dupes=remove_dupes,
+                remove_undo=remove_undo,
+                time_format=time_format,
+            )
+        )
 
     @log_command_group.command()
     @utils.autogenerate_options
-    async def get(self, ctx: discord.ApplicationContext,
-                  include: discord.Option(
-                      str, choices=VoiceStateChange.__members__),
-                  include_alt: bool = True, *,
-                  channel: VOICE_STATE_CHANNELS = None,
-                  amount: int = -1, ignore_empty: bool = False,
-                  remove_dupes: bool = True, remove_undo: bool = True,
-                  only_present: bool = False,
-                  time_format: utils.time_format_option = 'R',
-                  ):
+    async def get(
+        self,
+        ctx: discord.ApplicationContext,
+        include: discord.Option(str, choices=VoiceStateChange.__members__),
+        include_alt: bool = True,
+        *,
+        channel: VOICE_STATE_CHANNELS = None,
+        amount: int = -1,
+        ignore_empty: bool = False,
+        remove_dupes: bool = True,
+        remove_undo: bool = True,
+        only_present: bool = False,
+        time_format: utils.time_format_option = "R",
+    ):
         """
         Get specified logs from a VC. Defaults to your VC.
 
@@ -275,29 +307,34 @@ class VcLog(cmds.Cog):
         if include_alt:
             vsc_types.append(vsc_types[0].opposite)
 
-        await ctx.respond(embed=await _vc_log_embed(
-            ctx=ctx,
-            vsc_types=vsc_types,
-            amount=amount,
-            channel=channel,
-            ignore_empty=ignore_empty,
-            only_present=only_present,
-            remove_dupes=remove_dupes,
-            remove_undo=remove_undo,
-            time_format=time_format))
+        await ctx.respond(
+            embed=await _vc_log_embed(
+                ctx=ctx,
+                vsc_types=vsc_types,
+                amount=amount,
+                channel=channel,
+                ignore_empty=ignore_empty,
+                only_present=only_present,
+                remove_dupes=remove_dupes,
+                remove_undo=remove_undo,
+                time_format=time_format,
+            )
+        )
 
 
 async def _log_changes(
-        guild_id: int,
-        member_id: int,
-        old_state: discord.VoiceState,
-        new_state: discord.VoiceState):
+    guild_id: int,
+    member_id: int,
+    old_state: discord.VoiceState,
+    new_state: discord.VoiceState,
+):
     time = utils.utcnow()
     for change in VoiceStateChange.find_changes(old_state, new_state):
         if change == VoiceStateChange.channel_leave:
             if len(old_state.channel.voice_states) == 0:
                 await VoiceStateChangeLog.delete_all(
-                    channel_id=old_state.channel.id)
+                    channel_id=old_state.channel.id
+                )
                 continue
             channel_id = old_state.channel.id
         else:
@@ -307,12 +344,13 @@ async def _log_changes(
             channel_id=channel_id,
             user_id=member_id,
             change_name=change.name,
-            time=time).save()
+            time=time,
+        ).save()
 
 
 async def _log_reconciliation(bot: discord.Bot):
     presumed_state_data = {
-        'guild_id': '',
+        "guild_id": "",
         "deaf": False,
         "mute": False,
         "self_mute": False,
@@ -322,7 +360,7 @@ async def _log_reconciliation(bot: discord.Bot):
         "afk": False,
         "channel": None,
         "requested_to_speak_at": None,
-        "suppress": False
+        "suppress": False,
     }
     await VoiceStateChangeLog.delete_all()
     for guild in bot.guilds:
@@ -350,21 +388,22 @@ async def _log_reconciliation(bot: discord.Bot):
                     guild_id=guild.id,
                     member_id=member_id,
                     old_state=presumed_state,
-                    new_state=voice_state)
+                    new_state=voice_state,
+                )
 
 
 # ToDo: Breakup _vc_log_embed
 async def _vc_log_embed(
-        ctx: discord.ApplicationContext,
-        vsc_types: Collection[VoiceStateChange] | None = None,
-        amount: int = -1,
-        only_present: bool | None = True,
-        channel: VOICE_STATE_CHANNELS | None = None,
-        time_format: utils.TimestampStyle = 'R',
-        ignore_empty: bool = True,
-        remove_dupes: bool = True,
-        remove_undo: bool = True) \
-        -> discord.Embed:
+    ctx: discord.ApplicationContext,
+    vsc_types: Collection[VoiceStateChange] | None = None,
+    amount: int = -1,
+    only_present: bool | None = True,
+    channel: VOICE_STATE_CHANNELS | None = None,
+    time_format: utils.TimestampStyle = "R",
+    ignore_empty: bool = True,
+    remove_dupes: bool = True,
+    remove_undo: bool = True,
+) -> discord.Embed:
     """
     Creates an embed with for the VC Log
 
@@ -385,19 +424,21 @@ async def _vc_log_embed(
         vc = channel
     elif isinstance(ctx.channel, VOICE_STATE_CHANNELS):
         vc = ctx.channel
-    elif ctx.user.voice is not None and \
-            isinstance(ctx.user.voice.channel, VOICE_STATE_CHANNELS):
+    elif ctx.user.voice is not None and isinstance(
+        ctx.user.voice.channel, VOICE_STATE_CHANNELS
+    ):
         vc = ctx.user.voice.channel
     else:
         return utils.make_error(
-            title='Could not fetch VC Log',
-            desc='You\'re not in a Voice Channel.')
+            title="Could not fetch VC Log",
+            desc="You're not in a Voice Channel.",
+        )
 
     voices = set(vc.voice_states)
     if only_present:
-        options = {'user_id': voices}
+        options = {"user_id": voices}
     elif only_present is None:
-        options = {'not_user_id': voices}
+        options = {"not_user_id": voices}
     else:
         options = {}
 
@@ -407,9 +448,8 @@ async def _vc_log_embed(
         vsc_types: tuple[str] = tuple(vsc.name for vsc in vsc_types)
 
     events = await VoiceStateChangeLog.load_all(
-        channel_id=vc.id,
-        change_name=[vsc for vsc in vsc_types],
-        **options)
+        channel_id=vc.id, change_name=[vsc for vsc in vsc_types], **options
+    )
 
     if amount == -1:
         amount = len(events)
@@ -417,29 +457,32 @@ async def _vc_log_embed(
 
     fields = {}
     for event in iterator:
-        existing = fields.get(event.change_name, '')
-        mention = f'<@{event.user_id}>'
-        if (remove_dupes and mention in existing) or \
-                (remove_undo and mention in
-                 fields.get(event.change.opposite.name, '')):
+        existing = fields.get(event.change_name, "")
+        mention = f"<@{event.user_id}>"
+        if (remove_dupes and mention in existing) or (
+            remove_undo
+            and mention in fields.get(event.change.opposite.name, "")
+        ):
             continue
         time_str = utils.format_dt(event.time, time_format)
-        line = f'- {mention} {time_str}\n'
+        line = f"- {mention} {time_str}\n"
         if len(existing + line) > 1023:
-            fields[event.change_name] = existing + '+'
+            fields[event.change_name] = existing + "+"
         else:
             fields[event.change_name] = existing + line
 
     embed = utils.make_embed(
-        title=f'Voice Event history in `{vc.name}`:', ctx=ctx)
+        title=f"Voice Event history in `{vc.name}`:", ctx=ctx
+    )
     for field in vsc_types:
         if ignore_empty and field not in fields:
             continue
         # ToDo: Inline with opposite
         embed.add_field(
-            name=field.replace('_', ' ').title() + 's',
-            value=fields.get(field, '- None'),
-            inline=False)
+            name=field.replace("_", " ").title() + "s",
+            value=fields.get(field, "- None"),
+            inline=False,
+        )
     if len(embed.fields) == 0:
-        embed.description = 'No logs present.'
+        embed.description = "No logs present."
     return embed
