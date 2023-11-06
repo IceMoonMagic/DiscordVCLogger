@@ -128,6 +128,9 @@ Owners can unlock the extension's data with `/genshin unlock` or re-lock it with
 ## Contributions
 This is a personal project, any modifications you may want to make will likely be better suited for your own fork.
 
+Also, the code now follows 
+[The _Black_ Style Guide](https://black.readthedocs.io/en/stable/the_black_code_style/current_style.html),
+with the setting the line length to 79 (`--line-length 79`).
 ## License
 [MIT License](LICENSE) | [Read More](https://choosealicense.com/licenses/mit/#)
 
