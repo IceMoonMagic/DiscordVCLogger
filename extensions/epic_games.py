@@ -225,38 +225,40 @@ async def fetch_free_games() -> tuple[list[FreeGame], dt.datetime]:
     next_update = dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(days=7)
     games: list[FreeGame] = []
     for game in games_raw:
-        if len(promotions := game['promotions']['promotionalOffers']) == 0:
-            promotions = game['promotions']['upcomingPromotionalOffers']
-        promotions = promotions[0]['promotionalOffers'][0]
-        if promotions['discountSetting']['discountPercentage'] != 0:
-            continue
+        promotions = (
+            game['promotions']['promotionalOffers'][0]['promotionalOffers']
+            + game['promotions']['upcomingPromotionalOffers'][0]['promotionalOffers']
+        )
+        for promotion in promotions:
+            if promotion['discountSetting']['discountPercentage'] != 0:
+                continue
 
-        start = dt.datetime.fromisoformat(promotions['startDate'])
-        end = dt.datetime.fromisoformat(promotions['endDate'])
+            start = dt.datetime.fromisoformat(promotions['startDate'])
+            end = dt.datetime.fromisoformat(promotions['endDate'])
 
-        for img in game['keyImages']:
-            if img['type'] == 'OfferImageWide':
-                image_url = img['url']
-                break
-        else:
-            image_url = ''
-
-        if (page_url := game['productSlug']) is None:
-            for offerMapping in game.get('offerMappings', []):
-                if page_url := offerMapping.get('pageSlug', False):
+            for img in game['keyImages']:
+                if img['type'] == 'OfferImageWide':
+                    image_url = img['url']
                     break
             else:
-                page_url = ''
+                image_url = ''
 
-        games.append(FreeGame(
-            name=game['title'],
-            desc=game['description'],
-            start=start,
-            end=end,
-            price_str=game['price']['totalPrice']['fmtPrice']['originalPrice'],
-            image_url=image_url,
-            page_url=page_url,
-        ))
-        next_update = min(next_update, end if games[-1].active else start)
+            if (page_url := game['productSlug']) is None:
+                for offerMapping in game.get('offerMappings', []):
+                    if page_url := offerMapping.get('pageSlug', False):
+                        break
+                else:
+                    page_url = ''
+
+            games.append(FreeGame(
+                name=game['title'],
+                desc=game['description'],
+                start=start,
+                end=end,
+                price_str=game['price']['totalPrice']['fmtPrice']['originalPrice'],
+                image_url=image_url,
+                page_url=page_url,
+            ))
+            next_update = min(next_update, end if games[-1].active else start)
 
     return games, next_update
