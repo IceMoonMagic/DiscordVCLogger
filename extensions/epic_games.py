@@ -26,7 +26,7 @@ def teardown(bot: cmd.Bot):
 
 epic_json = db.get_json_data(__name__)
 EPIC_FREE_PROMOTIONS_URL = epic_json.get("promotions url", "")
-EPIC_STORE_HOME = epic_json.get("store home", "")
+EPIC_STORE_HOME = epic_json.get("store url", "")
 EPIC_ICON = epic_json.get("store icon", "")
 del epic_json
 
@@ -204,7 +204,7 @@ class EpicGames(cmd.Cog):
             self.check_loop.cancel()
             self.check_loop = asyncio.create_task(games_check_loop(self.bot))
         await ctx.respond(
-            embeds=utils.make_embed(
+            embed=utils.make_embed(
                 "Hard Reset Free Games",
                 "The game_check_loop has been replaced "
                 "and free games re-fetched.",
@@ -235,12 +235,15 @@ async def fetch_free_games() -> tuple[list[FreeGame], dt.datetime]:
     next_update = dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(days=7)
     games: list[FreeGame] = []
     for game in games_raw:
-        promotions = (
-            game["promotions"]["promotionalOffers"][0]["promotionalOffers"]
-            + game["promotions"]["upcomingPromotionalOffers"][0][
+        promotions = []
+        if len(game["promotions"]["promotionalOffers"]) != 0:
+            promotions += game["promotions"]["promotionalOffers"][0][
                 "promotionalOffers"
             ]
-        )
+        if len(game["promotions"]["upcomingPromotionalOffers"]) != 0:
+            promotions += game["promotions"]["upcomingPromotionalOffers"][0][
+                "promotionalOffers"
+            ]
         for promotion in promotions:
             if promotion["discountSetting"]["discountPercentage"] != 0:
                 continue
