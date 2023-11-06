@@ -196,6 +196,21 @@ class EpicGames(cmd.Cog):
             games = await FreeGame.load_all()
         await ctx.respond(embeds=[g.embed() for g in games if g.active])
 
+    @cmd.is_owner()
+    @epic_cmds.command()
+    async def hard_reset(self, ctx: discord.ApplicationContext):
+        await ctx.defer()
+        if not (self.check_loop is None) and not self.check_loop.done():
+            self.check_loop.cancel()
+            self.check_loop = asyncio.create_task(games_check_loop(self.bot))
+        await ctx.respond(
+            embeds=utils.make_embed(
+                "Hard Reset Free Games",
+                "The game_check_loop has been replaced "
+                "and free games re-fetched.",
+            )
+        )
+
 
 async def games_check_loop(bot: cmd.Bot):
     while len(notif := await FreeNotifications.load_all()) > 0:
