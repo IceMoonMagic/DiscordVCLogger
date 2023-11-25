@@ -29,33 +29,40 @@ def teardown(bot: cmd.Bot):
 
 @dc.dataclass
 class HoyoLabData(db.Storable):
-    primary_key_name = "discord_snowflake"
-    table_name = "GenshinData"
+    primary_key_name = "_account_id"
 
-    encrypt_attrs = ["account_id", "cookie_token", "ltuid", "ltoken"]
+    encrypt_attrs = ["cookie_token"]
 
     discord_snowflake: int
-    account_id: str
+    _account_id: int
     cookie_token: str
-    ltuid: str
-    ltoken: str
+    v2: bool = True  # if using v2 Cookies
     # ToDo: Implement for each `genshin.Game` (Genshin, Honkai3rd, Starrail)
     auto_daily: bool = True
     auto_codes: bool = True
-    notif_daily: bool = True
-    notif_codes: bool = True
 
     @property
     def snowflake(self) -> int:
         return self.discord_snowflake
 
     @property
+    def account_id(self) -> str:
+        return str(self._account_id)
+    
+    @account_id.setter
+    def account_id(self, account_id: int | str):
+        self._account_id = int(account_id)
+
+    @property
     def cookies(self) -> dict[str, str]:
+        if self.v2:
+            return {
+                "account_id_v2": self.account_id,
+                "cookie_token_v2": self.cookie_token,
+            }
         return {
             "account_id": self.account_id,
             "cookie_token": self.cookie_token,
-            "ltuid": self.ltuid,
-            "ltoken": self.ltoken,
         }
 
     @property
@@ -63,8 +70,6 @@ class HoyoLabData(db.Storable):
         return {
             "auto_daily": self.auto_daily,
             "auto_codes": self.auto_codes,
-            "notif_daily": self.notif_daily,
-            "notif_codes": self.notif_codes,
         }
 
 
