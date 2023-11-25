@@ -358,16 +358,22 @@ def _make_client(
     return client
 
 
-async def _get_client(
-    snowflake: int, game: genshin.Game = genshin.Game.GENSHIN
-) -> genshin.Client | utils.ErrorEmbed:
+async def _get_data(snowflake) -> HoyoLabData | utils.ErrorEmbed:
     if isinstance(data := await HoyoLabData.load(snowflake), HoyoLabData):
-        return _make_client(data, game)
+        return data
     return utils.make_error(
         "Failed to Retrieve User Data",
         "Please configure your information using "
         "`/genshin configure cookies`.",
     )
+
+
+async def _get_client(
+    snowflake: int, game: genshin.Game = genshin.Game.GENSHIN
+) -> genshin.Client | utils.ErrorEmbed:
+    if isinstance(data := await _get_data(snowflake), HoyoLabData):
+        return _make_client(data, game)
+    return data
 
 
 async def _redeem_daily(
@@ -457,36 +463,32 @@ async def _redeem_code(
         )
 
 
-async def _check(
-    user_id: int,
-    ctx: discord.ApplicationContext = None,
-    *,
-    color: discord.Color = None,
+async def _check_cookies(
+    data: HoyoLabData,
 ) -> discord.Embed | utils.ErrorEmbed:
-    if not (client := await _get_client(user_id)):
-        return utils.make_error(
-            "No Data Present", "Your HoyoLab cookies are not saved."
-        )
+    client = _make_client(data)
     try:
-        check = await client.get_game_accounts()
+        accounts = await client.get_game_accounts()
     except genshin.CookieException:
         return utils.make_error(
             "Invalid Cookie Data",
             "Unable to login to HoyoLab with your cookies.",
         )
 
-    embed = utils.make_embed(
-        "Account Successfully Connected", "", ctx=ctx, color=color
-    )
-    for account in check:
+    embed = utils.make_embed("Account Successfully Connected", "")
+    for account in accounts:
         values = ""
         for k, v in dict(account).items():
             values += f'{k.replace("_", " ").title()}: `{v}`\n'
         embed.add_field(
             name=account.game.name, value=values.strip(), inline=False
         )
+    return embed
 
-    for name, value in (await HoyoLabData.load(user_id)).settings.items():
+
+def _check_settings(data: HoyoLabData) -> discord.Embed:
+    embed = utils.make_embed(f"Account Settings for `{data.account_id}`", "")
+    for name, value in data.settings.items():
         for option in HoyoLab.settings.options:
             if name == option.name:
                 embed.add_field(
@@ -495,5 +497,4 @@ async def _check(
                     inline=False,
                 )
                 break
-
     return embed
