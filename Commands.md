@@ -1,10 +1,31 @@
 ## system
+### Commands
 * `/system shutdown`
   * Triggers the bot's shutdown procedure
   * Requirements: Invoker is an owner
 * `/system ip`
   * Returns the local IP of the bot for SSH purposes
   * Requirements: Invoker is an owner
+
+## extensions.epic_games
+### Commands
+* `/epic current`
+  * Fetches the games that are currently free on epic
+* `/epic add_notif`
+  * Adds current DM / Channel / Thread to locations to send free game information (when it changes). (Also starts loop if nessisary).
+  * Requirements: In a DM OR manage webhooks permission OR manage channel permission for channel OR manage thread permission for thread
+* `/epic rm_notif`
+  * Removes current DM / Channel / Thread from locations to send free game information.
+  * Requirements: In a DM OR manage webhooks permission OR manage channel permission for channel OR manage thread permission for thread
+* `/epic hard_reset`
+  * Deletes the current notif loop and starts a new one. This will also cause a refresh of cached free games
+  * Requirements: Invoker is an owner
+
+### Routines / Listeners
+* `games_check_loop`
+  * Refreshes cached games
+  * Send messages to registered locations
+  * Sleep until the next change (typically a week).
 
 ## extensions.hoyolab
 ___Abandoned___ due to taking more work to maintain than it is worth (thanks Hoyoverse).
@@ -69,6 +90,24 @@ receive a DM informing them of the result.
 * `unlock_reminder`
   * Informs the bot owner(s) that HoyoLabData doesn't have a key.
   * Trigger: `bot.on_ready` (initial startup / reconnect)
+
+## extensions.misc
+### Commands
+* Message -> Apps -> `Convert Links`
+  * Replaces links to ones that work better in discord.
+  * It performs this with basic python `str.replace` and can be applied to any kind of string, not just links
+* User -> Apps -> `Get Avatar`
+  * Sends the user's avatar
+  * If they have a guild avatar, shows both global and local avatars
+
+## extensions.time
+### Commands
+* `/time now`
+  * Returns the timestamps for the time of execution
+* `/time in [days] [hours] [minutes] [seconds] [milliseconds]`
+  * Returns the timestamps for the time after the specified delta
+* `/time at <year> <month> <day> [hour] [minute] [second] [microsecond] [tz_offset]`
+  * Returns the timestamps for the specified time.
 
 ## extensions.vc_log
 ### Commands

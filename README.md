@@ -36,11 +36,7 @@ Everything related to my personal discord bot.
 
 ### Selecting Extensions
 All [extensions](#extensions) are enabled by default. 
-They can be disabled by commenting out / removing the lines in `discord_bot.py` where they are loaded 
-(the lines after`bot.load_extensions`).
-
-While the extensions should load what they need from `system.py` weather or not it's loaded as an extension,
-the bot would lack the associated commands (notably `/system shutdown`) and proper error handling.
+They can be disabled by removing them from the extensions list in `saves/bot_key.json` (under `"__main__"` -> `"extensions"`).
 
 ### Running
 Execute `python discord_bot.py`
@@ -94,13 +90,13 @@ and replacements logic can be tested with `python -c "print('link_text'.replace(
 
 ### HoyoLab
 ___Abandoned___ due to taking more work to maintain than it is worth (thanks Hoyoverse).
-It'll likely be removed once daily check-in completely stops working, as it seems like the only working part remaining.
+I may try to keep it working, but it may be dropped at any point and completely removed if everything stops working.
 
 Allows automatically redeeming [HoyoLab Daily Check-In](https://genshin-impact.fandom.com/wiki/HoYoLAB_Community_Daily_Check-In) 
 and redeeming [Gift Codes](https://genshin.hoyoverse.com/en/gift).
 (Note: Links here are specific to Genshin Impact, but functionality should be present for Honkai Impact 3rd and Honkai Star Rail as well)
 
-Users can register their cookies using the `/genshin config cookeis`.
+Users can register their cookies using the `/genshin config cookies`.
 This will present them with a modal that for them to insert their `account_id` and `cookie_token` from [HoyoLab](https://www.hoyolab.com/).
 The other necessary cookies are automatically created.
 the cookies are encrypted before being stored.
@@ -124,6 +120,26 @@ Users can manually redeem their daily check-in using `/genshin daily redeem_dail
 Owners can manually trigger the automatic daily check-in redemption with `/genshin daily induce_daily`.
 
 Owners can unlock the extension's data with `/genshin unlock` or re-lock it with `/genshin lock`.
+
+### Epic Games
+Notifications for the current free games on the Epic Games Store.
+
+Users can check the current free games with `/epic current`.
+
+Users in DMs, Webhook Managers, Channel Mangers in channels, and Thread Managers in threads can create a register a notification location with `/epic add_notif` and remove it with `/epic rm_notif`.
+Registered DMs / Channels / Threads will be sent the embed for the new free games when they become free.
+
+Owners can manually reset the internal loop with `/epic hard_reset`. This deletes the existing loop and starts a new one, which also re-fetches the free games.
+
+### Time
+Commands for helping users make discord timestamps.
+All commands in this module return an embed with the specified time in all of discord's timestamp formats, along with a copy in copy-able text.
+
+Users can get timestamps for the current time with `/time now`.
+
+Users can get timestamps for a time after a specific delta `/time in [days] [hours] [minutes] [seconds] [milliseconds]`. The arguments are directly mapped to a python timedelta object, which is then added to a "now" datetime.
+
+Users can get timestamps for a specific time with `/time at <year> <month> <day> [hour] [minute] [second] [microsecond] [tz_offset]`. The arguments are directly mapped to a python datetime object. The `tz_offset` is the hours offset from UTC.
 
 ## Contributions
 This is a personal project, any modifications you may want to make will likely be better suited for your own fork.
