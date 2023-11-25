@@ -75,10 +75,15 @@ class HoyoLabData(db.Storable):
 
 class CookieModal(discord.ui.Modal):
     def __init__(
-        self, *children: discord.ui.InputText, title: str, bot: cmd.Bot
+        self,
+        *children: discord.ui.InputText,
+        title: str,
+        bot: cmd.Bot,
+        v2: bool = True,
     ):
         super().__init__(*children, title=title)
         self.bot = bot
+        self.v2 = v2
         self.add_item(
             discord.ui.InputText(label="Account ID", placeholder="account_id")
         )
@@ -91,36 +96,39 @@ class CookieModal(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        cookies = {
-            "account_id": self.children[0].value,
-            "cookie_token": self.children[1].value,
-        }
+        account_id = self.children[0].value
+        cookie_token = self.children[1].value
         try:
-            cookies.update(await genshin.complete_cookies(cookies))
-        except genshin.CookieException:
+            account_id = int(account_id)
+        except ValueError:
             await interaction.followup.send(
                 ephemeral=True,
                 embed=utils.make_error(
-                    "Invalid Cookie Data",
-                    "The cookie data you entered "
-                    "did not work and was discarded.",
+                    "Invalid Account Id",
+                    "The `account_id` you entered does not seem correct "
+                    "(due to not being a base 10 number) was discarded.",
                 ),
             )
             return
 
         if data := await HoyoLabData.load(interaction.user.id, decrypt=False):
-            await data.update(**cookies).save()
+            data.account_id = account_id
+            data.cookie_token = cookie_token
+            data.v2 = self.v2
         else:
-            await HoyoLabData(interaction.user.id, **cookies).save()
+            data = HoyoLabData(
+                discord_snowflake=interaction.user.id,
+                _account_id=int(account_id),
+                cookie_token=cookie_token,
+                v2=self.v2,
+            )
+
+        if check := await _check_cookies(data):
+            await data.save()
 
         await interaction.followup.send(
             ephemeral=True,
-            embed=await _check(
-                interaction.user.id,
-                color=interaction.guild.me.color
-                if interaction.guild
-                else None,
-            ),
+            embed=check,
         )
 
 
