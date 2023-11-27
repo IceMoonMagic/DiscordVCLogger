@@ -375,10 +375,7 @@ class HoyoLab(cmd.Cog):
             return
 
         with asyncio.TaskGroup() as tg:
-            if (await HoyoLabData.load(ctx.author.id)).notif_codes:
-                tg.create_task(
-                    utils.send_dm(ctx.author.id, ctx.bot, embed=embed)
-                )
+            tg.create_task(utils.send_dm(ctx.author.id, ctx.bot, embed=embed))
 
             async for person in HoyoLabData.load_gen(auto_codes=True):
                 if person.snowflake == ctx.author.id:
@@ -390,7 +387,7 @@ class HoyoLab(cmd.Cog):
                         user_id=person.snowflake,
                         bot=ctx.bot,
                         coro=_redeem_code(client, code),
-                        send=person.notif_codes,
+                        send=True,
                     )
                 )
 
@@ -408,13 +405,17 @@ class HoyoLab(cmd.Cog):
         """Check your settings and cookie status."""
         await ctx.defer(ephemeral=True)
 
-        await ctx.respond(embed=await _check(ctx.author.id, ctx))
+        await ctx.respond(embed=await _check_cookies(ctx.author.id))
 
     @configure_cmds.command()
     @utils.autogenerate_options
     async def cookies(self, ctx: discord.ApplicationContext):
         """Set your HoyoLab cookies."""
-        await ctx.send_modal(CookieModal(title="HoyoLab Cookies", bot=ctx.bot))
+        await ctx.respond(
+            embed=CookieView.make_instruction_embed(),
+            ephemeral=True,
+            view=CookieView(),
+        )
 
     @configure_cmds.command()
     @utils.autogenerate_options
@@ -431,44 +432,18 @@ class HoyoLab(cmd.Cog):
 
     @configure_cmds.command()
     @utils.autogenerate_options
-    async def settings(
-        self,
-        ctx: discord.ApplicationContext,
-        auto_daily: bool = None,
-        auto_codes: bool = None,
-        notif_daily: bool = None,
-        notif_codes: bool = None,
-    ):
-        """
-        Configure settings for interactions with HoyoLab.
-
-        :param ctx: Application context from Discord.
-        :param auto_daily: Allow the bot to automatically redeem your
-        HoyoLab daily check-in.
-        :param auto_codes: Allow the bot to redeem codes others share with the
-        share_codes command.
-        :param notif_daily: Receive DMs for automatically claimed
-        daily check-in rewards.
-        :param notif_codes: Receive DMs for automatically claimed gift codes.
-        """
+    async def settings(self, ctx: discord.ApplicationContext):
         await ctx.defer(ephemeral=True)
-        if isinstance(
-            data := await HoyoLabData.load(ctx.author.id), HoyoLabData
-        ):
-            data.auto_daily = (
-                auto_daily if auto_daily is not None else data.auto_daily
+        data = await HoyoLabData.load_all(discord_snowflake=ctx.author.id)
+        if len(data) == 0:
+            await ctx.respond(
+                embed=utils.make_embed(
+                    "No Accounts",
+                    "No accounts to show settings for. "
+                    "You can add some with `/genshin config cookies`",
+                )
             )
-            data.auto_codes = (
-                auto_codes if auto_codes is not None else data.auto_codes
-            )
-            data.notif_daily = (
-                notif_codes if notif_daily is not None else data.notif_daily
-            )
-            data.notif_codes = (
-                notif_codes if notif_codes is not None else data.notif_daily
-            )
-            await data.save()
-        await ctx.respond(embed=await _check(ctx.author.id))
+        await ctx.respond(view=SettingsView(data))
 
     @cmd.is_owner()
     @genshin_cmds.command()
@@ -577,7 +552,7 @@ async def auto_redeem_daily(bot: cmd.Bot):
                         user_id=person.snowflake,
                         bot=bot,
                         coro=_redeem_daily(client),
-                        send=person.notif_daily,
+                        send=True,
                     )
                 )
 
