@@ -36,6 +36,7 @@ class HoyoLabData(db.Storable):
     discord_snowflake: int
     _account_id: int
     cookie_token: str
+    nickname: str = ""
     v2: bool = True  # if using v2 Cookies
     # ToDo: Implement for each `genshin.Game` (Genshin, Honkai3rd, Starrail)
     auto_daily: bool = True
@@ -82,12 +83,22 @@ class CookieModal(discord.ui.Modal):
     ):
         super().__init__(*children, title=title)
         self.v2 = v2
+        v2_str = "_v2" if v2 else ""
         self.add_item(
-            discord.ui.InputText(label="Account ID", placeholder="account_id")
+            discord.ui.InputText(
+                label="Account ID", placeholder="account_id" + v2_str
+            )
         )
         self.add_item(
             discord.ui.InputText(
-                label="Cookie Token", placeholder="cookie_token"
+                label="Cookie Token", placeholder="cookie_token" + v2_str
+            )
+        )
+        self.add_item(
+            discord.ui.InputText(
+                label="Nickname (Optional)",
+                placeholder='e.g. "Main Genshin"',
+                required=False,
             )
         )
 
@@ -96,6 +107,7 @@ class CookieModal(discord.ui.Modal):
 
         account_id = self.children[0].value
         cookie_token = self.children[1].value
+        nickname = self.children[2].value or ""
         try:
             account_id = int(account_id)
         except ValueError:
@@ -119,6 +131,7 @@ class CookieModal(discord.ui.Modal):
                 _account_id=int(account_id),
                 cookie_token=cookie_token,
                 v2=self.v2,
+                nickname=nickname,
             )
 
         if check := await _check_cookies(data):
@@ -151,6 +164,7 @@ class CookieView(discord.ui.View):
         "5. Copy Cookies (which ever set is available):\n"
         " - `account_id` and `cookie_token` (v1 Cookies)\n"
         " - `account_id_v2` and `cookie_token_v2` (v2 Cookies)\n"
+        " - (Using an already used account_id(_v2) will update the entry)\n"
         "6. Press the Button for which cookies you have and fill in the modal.\n"
     )
 
@@ -198,7 +212,11 @@ class SettingsView(discord.ui.View):
         self.accounts = datas[:25]  # Limit of Discord
         select_account: discord.ui.Select = self.get_item("account_select")
         for i, account in enumerate(self.accounts):
-            select_account.add_option(label=account.account_id, value=str(i))
+            if account.nickname:
+                label = f"{account.nickname} ({account.account_id})"
+            else:
+                label = account.account_id
+            select_account.add_option(label=label, value=str(i))
 
     @discord.ui.select(
         placeholder="Select an Account", custom_id="account_select", row=0
