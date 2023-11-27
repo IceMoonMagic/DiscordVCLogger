@@ -48,7 +48,7 @@ class HoyoLabData(db.Storable):
     @property
     def account_id(self) -> str:
         return str(self._account_id)
-    
+
     @account_id.setter
     def account_id(self, account_id: int | str):
         self._account_id = int(account_id)
@@ -272,17 +272,17 @@ class HoyoLab(cmd.Cog):
     def __init__(self, bot: cmd.Bot):
         self.bot = bot
 
-    genshin_cmds = discord.SlashCommandGroup("genshin", "foo")
+    hoyolab_cmds = discord.SlashCommandGroup("hoyo", "foo")
 
-    daily_rewards_cmds = genshin_cmds.create_subgroup(
+    daily_rewards_cmds = hoyolab_cmds.create_subgroup(
         "daily", "Relating to HoyoLab Daily Check-In"
     )
 
-    redeem_codes_cmds = genshin_cmds.create_subgroup(
+    redeem_codes_cmds = hoyolab_cmds.create_subgroup(
         "code", "Relating to Genshin Gift Codes"
     )
 
-    configure_cmds = genshin_cmds.create_subgroup("config")
+    configure_cmds = hoyolab_cmds.create_subgroup("config")
 
     # ToDo: Verify game account exists
     game_selection = discord.Option(
@@ -440,18 +440,18 @@ class HoyoLab(cmd.Cog):
                 embed=utils.make_embed(
                     "No Accounts",
                     "No accounts to show settings for. "
-                    "You can add some with `/genshin config cookies`",
+                    "You can add some with `/hoyo config cookies`",
                 )
             )
         await ctx.respond(view=SettingsView(data))
 
     @cmd.is_owner()
-    @genshin_cmds.command()
+    @hoyolab_cmds.command()
     async def unlock(self, ctx: discord.ApplicationContext):
         await ctx.send_modal(utils.UnlockModal(HoyoLabData))
 
     @cmd.is_owner()
-    @genshin_cmds.command()
+    @hoyolab_cmds.command()
     async def lock(self, ctx: discord.ApplicationContext):
         HoyoLabData.clear_key()
         await ctx.respond(
@@ -483,7 +483,7 @@ async def _get_data(snowflake) -> HoyoLabData | utils.ErrorEmbed:
     return utils.make_error(
         "Failed to Retrieve User Data",
         "Please configure your information using "
-        "`/genshin configure cookies`.",
+        "`/hoyo configure cookies`.",
     )
 
 
