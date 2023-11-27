@@ -291,6 +291,7 @@ class HoyoLab(cmd.Cog):
 
     @cmd.Cog.listener("on_ready")
     async def unlock_reminder(self):
+        await asyncio.sleep(5 * 60)
         if HoyoLabData.box is None:
             for user_id in self.bot.owner_ids or [self.bot.owner_id]:
                 dm = await utils.get_dm(user_id, self.bot)
