@@ -78,11 +78,9 @@ class CookieModal(discord.ui.Modal):
         self,
         *children: discord.ui.InputText,
         title: str,
-        bot: cmd.Bot,
         v2: bool = True,
     ):
         super().__init__(*children, title=title)
-        self.bot = bot
         self.v2 = v2
         self.add_item(
             discord.ui.InputText(label="Account ID", placeholder="account_id")
@@ -126,9 +124,67 @@ class CookieModal(discord.ui.Modal):
         if check := await _check_cookies(data):
             await data.save()
 
+            # Disable old View
+            original_message = await interaction.original_response()
+            view = discord.ui.View.from_message(original_message)
+            view.disable_all_items()
+            view.stop()
+            await original_message.edit(view=view)
+
         await interaction.followup.send(
             ephemeral=True,
             embed=check,
+        )
+
+
+class CookieView(discord.ui.View):
+    instructions = (
+        "1. Go to https://hoyolab.com/.\n"
+        "2. Login to your account.\n"
+        "3. Open Developer Tools:\n"
+        " - `F12`\n"
+        " - `Ctrl` + `Shift` + `I`\n"
+        " - Menu > More Tools > (Web) Developer Tools\n"
+        "4. Find Cookies:\n"
+        " - (Chrome) Go to Application > Cookies > `https://www.hoyolab.com`.\n"
+        " - (Firefox) Go to Storage > Cookies > `https://www.hoyolab.com`.\n"
+        "5. Copy Cookies (which ever set is available):\n"
+        " - `account_id` and `cookie_token` (v1 Cookies)\n"
+        " - `account_id_v2` and `cookie_token_v2` (v2 Cookies)\n"
+        "6. Press the Button for which cookies you have and fill in the modal.\n"
+    )
+
+    @classmethod
+    def make_instruction_embed(cls, **kwargs):
+        return utils.make_embed(
+            title="Cookie Instructions",
+            desc=cls.instructions,
+            **kwargs,
+        )
+
+    def __init__(self, *items: discord.ui.Item):
+        super().__init__(*items)
+        link_button = discord.ui.Button(
+            label="HoyoLab",
+            url="https://www.hoyolab.com",
+            style=discord.ButtonStyle.link,
+        )
+        self.add_item(link_button)
+
+    @discord.ui.button(label="I have v1 Cookies")
+    async def v1_cookies(
+        self, _button: discord.ui.Button, interaction: discord.Interaction
+    ):
+        await interaction.response.send_modal(
+            CookieModal(title="HoyoLab Cookies", v2=False)
+        )
+
+    @discord.ui.button(label="I have v2 Cookies")
+    async def v2_cookies(
+        self, _button: discord.ui.Button, interaction: discord.Interaction
+    ):
+        await interaction.response.send_modal(
+            CookieModal(title="HoyoLab Cookies v2", v2=True)
         )
 
 
