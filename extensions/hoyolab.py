@@ -720,7 +720,21 @@ async def auto_redeem_daily(bot: cmd.Bot):
 
     async with asyncio.TaskGroup() as tg:
         async for person in HoyoLabData.load_gen(auto_daily=True):
-            for account in await _make_client(person).get_game_accounts():
+            try:
+                accounts = await _make_client(person).get_game_accounts()
+            except genshin.InvalidCookies:
+                await utils.send_dm(
+                    user_id=person.snowflake,
+                    bot=bot,
+                    embed=utils.make_error(
+                        'Invalid Cookies',
+                        f'Could not redeem any cookies for'
+                        f' `{person.display_name}` as saved '
+                        f'cookies are invalid.'
+                    )
+                )
+                continue
+            for account in accounts:
                 client = _make_client(person, account.game)
                 tg.create_task(
                     _auto_redeem_daily(
