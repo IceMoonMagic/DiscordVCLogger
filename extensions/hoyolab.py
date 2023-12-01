@@ -122,10 +122,29 @@ class CookieModal(discord.ui.Modal):
             )
             return
 
-        if data := await HoyoLabData.load(interaction.user.id, decrypt=False):
+        count, data = 0, None
+        for account in await HoyoLabData.load_all(
+            decrypt=False, discord_snowflake=interaction.user.id
+        ):
+            if account.account_id == account_id:
+                data = account
+                break
+            count += 1
+
+        if data:
             data.account_id = account_id
             data.cookie_token = cookie_token
             data.v2 = self.v2
+        elif count >= 25:
+            await interaction.followup.send(
+                ephemeral=True,
+                embed=utils.make_error(
+                    "Too Many Accounts",
+                    "This account could not be processed "
+                    "as it would put you past the limit of 25.",
+                ),
+            )
+            return
         else:
             data = HoyoLabData(
                 discord_snowflake=interaction.user.id,
@@ -172,12 +191,27 @@ class CookieView(discord.ui.View):
     )
 
     @classmethod
-    def make_instruction_embed(cls, **kwargs):
+    def make_instruction_embed(cls, **kwargs) -> discord.Embed:
         return utils.make_embed(
             title="Cookie Instructions",
             desc=cls.instructions,
             **kwargs,
         )
+
+    @staticmethod
+    def make_limit_embed(existing: int = None, **kwargs) -> discord.Embed:
+        embed = utils.make_embed(
+            "Account Limit",
+            "Due to a limitation of Discord's dropdown menus, "
+            "each Discord Account can only have 25 HoyoLab Accounts.",
+            **kwargs,
+        )
+        if existing is not None:
+            embed.add_field(
+                name="Existing Accounts",
+                value=f"You have {existing}/25 existing accounts.",
+            )
+        return embed
 
     def __init__(self, *items: discord.ui.Item):
         super().__init__(*items)
@@ -430,6 +464,10 @@ class HoyoLab(cmd.Cog):
             ephemeral=True,
             view=CookieView(),
         )
+        count = len(
+            await HoyoLabData.load_all(False, discord_snowflake=ctx.author.id)
+        )
+        await ctx.respond(embed=CookieView.make_limit_embed(count))
 
     @configure_cmds.command()
     @utils.autogenerate_options
