@@ -388,7 +388,7 @@ class HoyoLab(cmd.Cog):
                     )
                 )
 
-    @daily_rewards_cmds.command()
+    # @daily_rewards_cmds.command()
     @utils.autogenerate_options
     async def redeem_daily(
         self, ctx: discord.ApplicationContext, game: game_selection
@@ -399,13 +399,14 @@ class HoyoLab(cmd.Cog):
         :param ctx: Application Context form Discord.
         :param game: The game to run the command for.
         """
+        #TODO
         await ctx.defer(ephemeral=True)
         if not (client := await _get_client(ctx.author.id, game=game)):
             await ctx.respond(embed=client)
 
         await ctx.respond(embed=await _redeem_daily(client))
 
-    @redeem_codes_cmds.command()
+    # @redeem_codes_cmds.command()
     @utils.autogenerate_options
     async def redeem(
         self, ctx: discord.ApplicationContext, code: str, game: game_selection
@@ -417,6 +418,7 @@ class HoyoLab(cmd.Cog):
         :param code: Code to redeem.
         :param game: The game to run the command for.
         """
+        #TODO
         await ctx.defer(ephemeral=True)
 
         code = code.strip().upper()
@@ -438,14 +440,29 @@ class HoyoLab(cmd.Cog):
         :param code: Code to redeem.
         :param game: The game to run the command for.
         """
-
         await ctx.defer()
 
         code = code.strip().upper()
+        client: genshin.Client | None = None
+        for account in await HoyoLabData.load_all(discord_snowflake=ctx.author.id):
+            check = await _check_cookies(account)
+            if not check:
+                continue
 
-        if not (client := await _get_client(ctx.author.id, game=game)):
-            await ctx.respond(embed=client)
+            if game.name not in [field.name for field in check.fields]:
+                continue
+
+            client = _make_client(account, game=game)
+
+        if client is None:
+            await ctx.respond(
+                embed=utils.make_embed(
+                    "Code Share Aborted",
+                    f"No account found viable to test for {game}."
+                )
+            )
             return
+
         if (
             not (embed := await _redeem_code(client, code))
             and "claimed" not in embed.description
