@@ -521,7 +521,7 @@ class HoyoLab(cmd.Cog):
         async def _check(_data: HoyoLabData, interaction: discord.Interaction):
             await interaction.response.send_message(
                 ephemeral=True,
-                embed=_check_settings(_data),
+                embed=await _check_cookies(_data),
             )
 
         await ctx.respond(
