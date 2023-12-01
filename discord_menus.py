@@ -1,5 +1,5 @@
 import inspect
-from typing import Callable
+from typing import Any, Callable, Coroutine
 
 import discord
 
@@ -55,8 +55,6 @@ class DBToggleButton(ToggleButton):
     ):
         self.attribute = attribute
         self.data = data
-        if not disabled and data is None:
-            raise ValueError("Can not enable with no data.")
         super().__init__(
             starting_value=self._value,
             label=label,
@@ -64,12 +62,6 @@ class DBToggleButton(ToggleButton):
             custom_id=custom_id,
             row=row,
         )
-
-    @ToggleButton.disabled.setter
-    def disabled(self, value):
-        super().disabled = value
-        if self.data is None and not self.disabled:
-            raise ValueError("Can not enable with no data.")
 
     @property
     def _value(self) -> bool:
@@ -80,7 +72,7 @@ class DBToggleButton(ToggleButton):
         self.data.__setattr__(self.attribute, value)
 
 
-class DBSelector(discord.ui.Select):
+class DBSelect(discord.ui.Select):
     def __init__(
         self,
         options: list[db.S],
@@ -154,7 +146,7 @@ def db_select(
             raise TypeError("select function must be a coroutine function")
         # ---
 
-        func.__discord_ui_model_type__ = DBSelector
+        func.__discord_ui_model_type__ = DBSelect
         func.__discord_ui_model_kwargs__ = {
             "label_key": label_key,
             "desc_key": desc_key,
@@ -170,6 +162,47 @@ def db_select(
         return func
 
     return decorator
+
+
+class DBSelector(discord.ui.View):
+    def __init__(
+        self,
+        options: list[db.S],
+        followup: Callable[
+            [db.S, discord.Interaction], Coroutine[Any, Any, None]
+        ],
+        label_key: Callable[[db.S], str] = None,
+        desc_key: Callable[[db.S], str] = lambda _: None,
+        emoji_key: Callable[[db.S], str] = lambda _: None,
+        *,
+        custom_id: str = None,
+        placeholder: str = None,
+        disabled: bool = False,
+        row: int = None,
+        timeout: float = 180.0,
+        disable_on_timeout: bool = False,
+    ):
+        # self.select.__discord_ui_model_type__ = DBSelect
+        self.select.__discord_ui_model_kwargs__.update(
+            {
+                "options": options,
+                "label_key": label_key,
+                "desc_key": desc_key,
+                "emoji_key": emoji_key,
+                "custom_id": custom_id,
+                "placeholder": placeholder,
+                "disabled": disabled,
+                "row": row,
+            }
+        )
+        super().__init__(
+            timeout=timeout, disable_on_timeout=disable_on_timeout
+        )
+        self.followup = followup
+
+    @db_select()
+    async def select(self, select: DBSelect, interaction: discord.Interaction):
+        await self.followup(select.value, interaction)
 
 
 def disable_on_call(
