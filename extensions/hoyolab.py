@@ -74,6 +74,13 @@ class HoyoLabData(db.Storable):
             "auto_codes": self.auto_codes,
         }
 
+    @property
+    def display_name(self) -> str:
+        if self.nickname:
+            return f"{self.nickname} ({self.account_id})"
+        else:
+            return f"{self.account_id}"
+
 
 class CookieModal(discord.ui.Modal):
     def __init__(
@@ -172,7 +179,7 @@ class CookieModal(discord.ui.Modal):
 
 class NicknameModal(discord.ui.Modal):
     def __init__(self, data: HoyoLabData):
-        super().__init__(title=f"Change Nickname of `{data.account_id}`")
+        super().__init__(title=f"Change Nickname of `{data.display_name}`")
         self.data = data
         self.add_item(
             discord.ui.InputText(
@@ -191,8 +198,8 @@ class NicknameModal(discord.ui.Modal):
             ephemeral=True,
             embed=utils.make_embed(
                 "Nickname Updated",
-                f"Nickname for `{self.data.account_id}` "
-                f"is now `{self.data.nickname}`.",
+                f"Nickname for {self.data.account_id} "
+                f"is now {self.data.nickname}.",
             ),
         )
 
@@ -232,7 +239,7 @@ class CookieView(discord.ui.View):
     @staticmethod
     def make_limit_embed(existing: int = None, **kwargs) -> discord.Embed:
         embed = utils.make_embed(
-            "Account Limit",
+            "Note on Account Limit",
             "Due to a limitation of Discord's dropdown menus, "
             "each Discord Account can only have 25 HoyoLab Accounts.",
             **kwargs,
@@ -240,7 +247,7 @@ class CookieView(discord.ui.View):
         if existing is not None:
             embed.add_field(
                 name="Existing Accounts",
-                value=f"You have {existing}/25 existing accounts.",
+                value=f"You have `{existing}`/`25` existing accounts.",
             )
         return embed
 
@@ -327,7 +334,7 @@ class SettingsView(discord.ui.View):
 
         return (
             utils.make_embed(
-                f"Settings for `{data.account_id}`(`{data.nickname}`)",
+                f"Settings for `{data.display_name}`",
                 # f"{discord_menus.ToggleButton.TRUE_EMOJI} "
                 # f"- Setting Enabled\n"
                 # f"{discord_menus.ToggleButton.FALSE_EMOJI} "
@@ -498,7 +505,9 @@ class HoyoLab(cmd.Cog):
         count = len(
             await HoyoLabData.load_all(False, discord_snowflake=ctx.author.id)
         )
-        await ctx.respond(embed=CookieView.make_limit_embed(count))
+        await ctx.respond(
+            ephemeral=True, embed=CookieView.make_limit_embed(count)
+        )
 
     @configure_cmds.command()
     async def nickname(self, ctx: discord.ApplicationContext):
@@ -511,16 +520,21 @@ class HoyoLab(cmd.Cog):
                     "No Accounts", "No accounts to set nicknames for."
                 ),
             )
+            return
 
         await ctx.respond(
             ephemeral=True,
-            view=discord_menus.DBSelector(data, NicknameModal.send),
+            view=discord_menus.DBSelector(
+                data, NicknameModal.send, label_key=lambda d: d.display_name
+            ),
         )
 
     @configure_cmds.command()
     @utils.autogenerate_options
     async def delete(self, ctx: discord.ApplicationContext):
-        data = await HoyoLabData.load_all(discord_snowflake=ctx.author.id)
+        data = await HoyoLabData.load_all(
+            decrypt=False, discord_snowflake=ctx.author.id
+        )
         if len(data) == 0:
             await ctx.respond(
                 ephemeral=True,
@@ -528,9 +542,10 @@ class HoyoLab(cmd.Cog):
                     "No Accounts", "No accounts to delete."
                 ),
             )
+            return
 
         async def _del(_data: HoyoLabData, interaction: discord.Interaction):
-            display_name = _data.account_id
+            display_name = _data.display_name
             await HoyoLabData.delete(getattr(_data, _data.primary_key_name))
             await interaction.response.send_message(
                 ephemeral=True,
@@ -538,11 +553,14 @@ class HoyoLab(cmd.Cog):
                     f"Data for `{display_name}` Deleted",
                     "Your settings and HoyoLab cookies have been deleted.",
                     ctx,
-                )
+                ),
             )
 
         await ctx.respond(
-            ephemeral=True, view=discord_menus.DBSelector(data, _del)
+            ephemeral=True,
+            view=discord_menus.DBSelector(
+                data, _del, label_key=lambda d: d.display_name
+            ),
         )
 
     @configure_cmds.command()
@@ -559,7 +577,9 @@ class HoyoLab(cmd.Cog):
                 )
             )
         await ctx.respond(
-            view=discord_menus.DBSelector(data, SettingsView.send)
+            view=discord_menus.DBSelector(
+                data, SettingsView.send, label_key=lambda d: d.display_name
+            )
         )
 
     @cmd.is_owner()
@@ -646,7 +666,7 @@ async def _redeem_daily(
     except Exception as e:
         return utils.make_error(
             "Unknown Exception",
-            f"{failed_to_claim}. Unknown exception `{type(e)}",
+            f"{failed_to_claim}. Unknown exception `{type(e)}`",
         )
 
 
@@ -723,7 +743,7 @@ async def _check_cookies(
 
 
 def _check_settings(data: HoyoLabData) -> discord.Embed:
-    embed = utils.make_embed(f"Account Settings for `{data.account_id}`", "")
+    embed = utils.make_embed(f"Account Settings for `{data.display_name}`", "")
     for name, value in data.settings.items():
         for option in HoyoLab.settings.options:
             if name == option.name:
