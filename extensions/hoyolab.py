@@ -117,7 +117,7 @@ class CookieModal(discord.ui.Modal):
                 embed=utils.make_error(
                     "Invalid Account Id",
                     "The `account_id` you entered does not seem correct "
-                    "(due to not being a base 10 number) was discarded.",
+                    "(due to not being a base 10 number) and was discarded.",
                 ),
             )
             return
@@ -156,17 +156,19 @@ class CookieView(discord.ui.View):
         "1. Go to https://hoyolab.com/.\n"
         "2. Login to your account.\n"
         "3. Open Developer Tools:\n"
-        " - `F12`\n"
-        " - `Ctrl` + `Shift` + `I`\n"
         " - Menu > More Tools > (Web) Developer Tools\n"
-        "4. Find Cookies:\n"
+        " - OR `F12`\n"
+        " - OR `Ctrl` + `Shift` + `I`\n"
+        "4. Go to the Cookie Section:\n"
         " - (Chrome) Go to Application > Cookies > `https://www.hoyolab.com`.\n"
         " - (Firefox) Go to Storage > Cookies > `https://www.hoyolab.com`.\n"
         "5. Copy Cookies (which ever set is available):\n"
+        " > Using an already used `account_id(_v2)` will update the entry\n"
         " - `account_id` and `cookie_token` (v1 Cookies)\n"
         " - `account_id_v2` and `cookie_token_v2` (v2 Cookies)\n"
-        " - (Using an already used account_id(_v2) will update the entry)\n"
-        "6. Press the Button for which cookies you have and fill in the modal.\n"
+        "6. Press the button for which cookies you have and fill in the modal.\n"
+        "> If you get `Invalid Cookie Data` while you're sure they're correct,\n"
+        "> try signing out and back in or clearing your site cookies / data."
     )
 
     @classmethod
