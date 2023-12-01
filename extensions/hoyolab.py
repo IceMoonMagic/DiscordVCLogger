@@ -489,9 +489,30 @@ class HoyoLab(cmd.Cog):
     @utils.autogenerate_options
     async def check(self, ctx: discord.ApplicationContext):
         """Check your settings and cookie status."""
-        await ctx.defer(ephemeral=True)
+        data = await HoyoLabData.load_all(
+            discord_snowflake=ctx.author.id
+        )
+        if len(data) == 0:
+            await ctx.respond(
+                ephemeral=True,
+                embed=utils.make_embed(
+                    "No Accounts", "No accounts to check."
+                ),
+            )
+            return
 
-        await ctx.respond(embed=await _check_cookies(ctx.author.id))
+        async def _check(_data: HoyoLabData, interaction: discord.Interaction):
+            await interaction.response.send_message(
+                ephemeral=True,
+                embed=_check_settings(_data),
+            )
+
+        await ctx.respond(
+            ephemeral=True,
+            view=discord_menus.DBSelector(
+                data, _check, label_key=lambda d: d.display_name
+            ),
+        )
 
     @configure_cmds.command()
     @utils.autogenerate_options
