@@ -170,6 +170,37 @@ class CookieModal(discord.ui.Modal):
         )
 
 
+class NicknameModal(discord.ui.Modal):
+    def __init__(self, data: HoyoLabData):
+        super().__init__(title=f"Change Nickname of `{data.account_id}`")
+        self.data = data
+        self.add_item(
+            discord.ui.InputText(
+                label="Nickname (Optional)",
+                placeholder='e.g. "Main Genshin"',
+                required=False,
+            )
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        self.data.nickname = self.children[0].value or ""
+        await self.data.save()
+
+        await interaction.followup.send(
+            ephemeral=True,
+            embed=utils.make_embed(
+                "Nickname Updated",
+                f"Nickname for `{self.data.account_id}` "
+                f"is now `{self.data.nickname}`.",
+            ),
+        )
+
+    @classmethod
+    async def send(cls, data: HoyoLabData, interaction: discord.Interaction):
+        await interaction.response.send_modal(cls(data))
+
+
 class CookieView(discord.ui.View):
     instructions = (
         "1. Go to https://hoyolab.com/.\n"
@@ -470,16 +501,48 @@ class HoyoLab(cmd.Cog):
         await ctx.respond(embed=CookieView.make_limit_embed(count))
 
     @configure_cmds.command()
+    async def nickname(self, ctx: discord.ApplicationContext):
+        """Change the nickname for a HoyoLab Account."""
+        data = await HoyoLabData.load_all(discord_snowflake=ctx.author.id)
+        if len(data) == 0:
+            await ctx.respond(
+                ephemeral=True,
+                embed=utils.make_embed(
+                    "No Accounts", "No accounts to set nicknames for."
+                ),
+            )
+
+        await ctx.respond(
+            ephemeral=True,
+            view=discord_menus.DBSelector(data, NicknameModal.send),
+        )
+
+    @configure_cmds.command()
     @utils.autogenerate_options
     async def delete(self, ctx: discord.ApplicationContext):
-        await ctx.defer(ephemeral=True)
-        await HoyoLabData.delete(ctx.author.id)
-        await ctx.respond(
-            embed=utils.make_embed(
-                "Data Deleted",
-                "Your settings and HoyoLab cookies have been deleted.",
-                ctx,
+        data = await HoyoLabData.load_all(discord_snowflake=ctx.author.id)
+        if len(data) == 0:
+            await ctx.respond(
+                ephemeral=True,
+                embed=utils.make_embed(
+                    "No Accounts", "No accounts to delete."
+                ),
             )
+
+        async def _del(_data: HoyoLabData, interaction: discord.Interaction):
+            display_name = _data.account_id
+            await HoyoLabData.delete(getattr(_data, _data.primary_key_name))
+            await interaction.response.send_message(
+                ephemeral=True,
+                embed=utils.make_embed(
+                    f"Data for `{display_name}` Deleted",
+                    "Your settings and HoyoLab cookies have been deleted.",
+                    ctx,
+                )
+            )
+
+        await ctx.respond(
+            ephemeral=True, view=discord_menus.DBSelector(data, _del)
         )
 
     @configure_cmds.command()
