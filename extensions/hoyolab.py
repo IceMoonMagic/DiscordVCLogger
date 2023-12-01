@@ -8,6 +8,7 @@ import genshin
 from discord.ext.tasks import loop
 
 import database as db
+import discord_menus
 import utils
 
 logger = db.get_logger(__name__)
@@ -206,62 +207,21 @@ class SettingsView(discord.ui.View):
     ENABLED_EMOJI = "✅"  # ✔
     DISABLED_EMOJI = "❎"  # ✖
 
-    def __init__(self, datas: list[HoyoLabData]):
+    def __init__(self, data: HoyoLabData):
         super().__init__()
-        self.account: HoyoLabData | None = None
-        self.accounts = datas[:25]  # Limit of Discord
-        select_account: discord.ui.Select = self.get_item("account_select")
-        for i, account in enumerate(self.accounts):
-            if account.nickname:
-                label = f"{account.nickname} ({account.account_id})"
-            else:
-                label = account.account_id
-            select_account.add_option(label=label, value=str(i))
-
-    @discord.ui.select(
-        placeholder="Select an Account", custom_id="account_select", row=0
-    )
-    async def select_account(
-        self, select: discord.ui.Select, interaction: discord.Interaction
-    ):
-        self.account = self.accounts[int(select.values[0])]
-        select.placeholder = self.account.account_id
-        self.enable_all_items()
-        select.disabled = True
-        self.set_button_emoji(
-            self.get_item("checkin"), self.account.auto_daily
+        self.account = data
+        self.add_item(
+            discord_menus.DBToggleButton(
+                "auto_daily", data, label="Daily Check-In"
+            )
         )
-        self.set_button_emoji(self.get_item("codes"), self.account.auto_codes)
-        # await self.select_game(select_game, interaction)
-        await interaction.response.edit_message(view=self)
+        self.add_item(
+            discord_menus.DBToggleButton(
+                "auto_codes", data, label="Receive Codes"
+            )
+        )
 
-    def set_button_emoji(self, button: discord.ui.Button, enabled: bool):
-        if enabled:
-            button.emoji = self.ENABLED_EMOJI
-        else:
-            button.emoji = self.DISABLED_EMOJI
-
-    @discord.ui.button(
-        label="Daily Check-In", custom_id="checkin", disabled=True, row=2
-    )
-    async def toggle_daily(
-        self, button: discord.ui.Button, interaction: discord.Interaction
-    ):
-        self.account.auto_daily = not self.account.auto_daily
-        self.set_button_emoji(button, self.account.auto_daily)
-        await interaction.response.edit_message(view=self)
-
-    @discord.ui.button(
-        label="Receive Codes", custom_id="codes", disabled=True, row=2
-    )
-    async def toggle_codes(
-        self, button: discord.ui.Button, interaction: discord.Interaction
-    ):
-        self.account.auto_codes = not self.account.auto_codes
-        self.set_button_emoji(button, self.account.auto_codes)
-        await interaction.response.edit_message(view=self)
-
-    @discord.ui.button(label="Discard Changes", disabled=True, row=3)
+    @discord.ui.button(label="Discard Changes", row=1)
     async def discard(
         self, button: discord.ui.Button, interaction: discord.Interaction
     ):
@@ -273,8 +233,7 @@ class SettingsView(discord.ui.View):
     @discord.ui.button(
         label="Save Changes",
         style=discord.ButtonStyle.success,
-        disabled=True,
-        row=3,
+        row=1,
     )
     async def save(
         self, button: discord.ui.Button, interaction: discord.Interaction
@@ -284,6 +243,40 @@ class SettingsView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         self.stop()
         await self.account.save()
+
+    @classmethod
+    async def send(cls, data: HoyoLabData, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            embed=cls.make_embed(data), ephemeral=True, view=cls(data)
+        )
+
+    @staticmethod
+    def make_embed(data: HoyoLabData) -> discord.Embed:
+        code_share_name = HoyoLab.share.name
+        command = HoyoLab.share.parent
+        while command is not None:
+            code_share_name = f"{command.name} {code_share_name}"
+            command = command.parent
+
+        return (
+            utils.make_embed(
+                f"Settings for `{data.account_id}`(`{data.nickname}`)",
+                # f"{discord_menus.ToggleButton.TRUE_EMOJI} "
+                # f"- Setting Enabled\n"
+                # f"{discord_menus.ToggleButton.FALSE_EMOJI} "
+                # f"- Setting Disabled",
+            )
+            .add_field(
+                name="Daily Check-In",
+                value="Allow the bot to automatically "
+                "redeem your HoyoLab Daily Check-In",
+            )
+            .add_field(
+                name="Receive Codes",
+                value="Allow the bot to redeem gift codes "
+                f"shared by /{code_share_name}",
+            )
+        )
 
 
 class HoyoLab(cmd.Cog):
@@ -462,7 +455,9 @@ class HoyoLab(cmd.Cog):
                     "You can add some with `/hoyo config cookies`",
                 )
             )
-        await ctx.respond(view=SettingsView(data))
+        await ctx.respond(
+            view=discord_menus.DBSelector(data, SettingsView.send)
+        )
 
     @cmd.is_owner()
     @hoyolab_cmds.command()
