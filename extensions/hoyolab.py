@@ -477,7 +477,7 @@ class HoyoLab(cmd.Cog):
             )
             return
 
-        with asyncio.TaskGroup() as tg:
+        async with asyncio.TaskGroup() as tg:
             tg.create_task(utils.send_dm(ctx.author.id, ctx.bot, embed=embed))
 
             async for person in HoyoLabData.load_gen(auto_codes=True):
