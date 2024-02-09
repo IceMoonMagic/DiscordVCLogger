@@ -1,5 +1,5 @@
 import re
-from typing import Coroutine, Any
+from typing import Any, Callable, Coroutine
 
 import discord.utils
 import discord.ext.commands as cmd
@@ -140,6 +140,21 @@ def autogenerate_options(fn):
                     )
                 fn.__annotations__[name] = option
     return fn
+
+
+def get_qualified_name(
+    command: discord.SlashCommand | Callable,
+    include_slash: bool = True
+) -> str:
+    if not hasattr(command, 'name') or not hasattr(command, 'parent'):
+        raise TypeError(f'{command} is not a valid command.')
+
+    name = command.name
+    command = command.parent
+    while command is not None:
+        name = f"{command.name} {name}"
+        command = command.parent
+    return f"{'/' if include_slash else ''}{name}"
 
 
 async def get_dm(user_id: int, bot: cmd.Bot) -> discord.DMChannel:

@@ -175,6 +175,7 @@ class CookieModal(discord.ui.Modal):
             ephemeral=True,
             embed=check,
         )
+        await asyncio.sleep(10)
 
 
 class NicknameModal(discord.ui.Modal):
@@ -326,11 +327,7 @@ class SettingsView(discord.ui.View):
 
     @staticmethod
     def make_embed(data: HoyoLabData) -> discord.Embed:
-        code_share_name = HoyoLab.share.name
-        command = HoyoLab.share.parent
-        while command is not None:
-            code_share_name = f"{command.name} {code_share_name}"
-            command = command.parent
+        code_share_name = utils.get_qualified_name(HoyoLab.share)
 
         return (
             utils.make_embed(
@@ -399,7 +396,7 @@ class HoyoLab(cmd.Cog):
         :param ctx: Application Context form Discord.
         :param game: The game to run the command for.
         """
-        #TODO
+        # TODO
         await ctx.defer(ephemeral=True)
         if not (client := await _get_client(ctx.author.id, game=game)):
             await ctx.respond(embed=client)
@@ -418,7 +415,7 @@ class HoyoLab(cmd.Cog):
         :param code: Code to redeem.
         :param game: The game to run the command for.
         """
-        #TODO
+        # TODO
         await ctx.defer(ephemeral=True)
 
         code = code.strip().upper()
@@ -444,7 +441,9 @@ class HoyoLab(cmd.Cog):
 
         code = code.strip().upper()
         client: genshin.Client | None = None
-        for account in await HoyoLabData.load_all(discord_snowflake=ctx.author.id):
+        for account in await HoyoLabData.load_all(
+            discord_snowflake=ctx.author.id
+        ):
             check = await _check_cookies(account)
             if not check:
                 continue
@@ -458,7 +457,7 @@ class HoyoLab(cmd.Cog):
             await ctx.respond(
                 embed=utils.make_embed(
                     "Code Share Aborted",
-                    f"No account found viable to test for {game}."
+                    f"No account found viable to test for {game}.",
                 )
             )
             return
@@ -506,16 +505,9 @@ class HoyoLab(cmd.Cog):
     @utils.autogenerate_options
     async def check(self, ctx: discord.ApplicationContext):
         """Check your settings and cookie status."""
-        data = await HoyoLabData.load_all(
-            discord_snowflake=ctx.author.id
-        )
-        if len(data) == 0:
-            await ctx.respond(
-                ephemeral=True,
-                embed=utils.make_embed(
-                    "No Accounts", "No accounts to check."
-                ),
-            )
+        data = await _get_data(ctx.author.id)
+        if not data:
+            await ctx.respond(ephemeral=True, embed=data)
             return
 
         async def _check(_data: HoyoLabData, interaction: discord.Interaction):
@@ -540,9 +532,7 @@ class HoyoLab(cmd.Cog):
             ephemeral=True,
             view=CookieView(),
         )
-        count = len(
-            await HoyoLabData.load_all(False, discord_snowflake=ctx.author.id)
-        )
+        count = len(await _get_data(ctx.author.id, decrypt=False))
         await ctx.respond(
             ephemeral=True, embed=CookieView.make_limit_embed(count)
         )
@@ -550,14 +540,9 @@ class HoyoLab(cmd.Cog):
     @configure_cmds.command()
     async def nickname(self, ctx: discord.ApplicationContext):
         """Change the nickname for a HoyoLab Account."""
-        data = await HoyoLabData.load_all(discord_snowflake=ctx.author.id)
-        if len(data) == 0:
-            await ctx.respond(
-                ephemeral=True,
-                embed=utils.make_embed(
-                    "No Accounts", "No accounts to set nicknames for."
-                ),
-            )
+        data = await _get_data(ctx.author.id)
+        if not data:
+            await ctx.respond(ephemeral=True, embed=data)
             return
 
         await ctx.respond(
@@ -570,16 +555,9 @@ class HoyoLab(cmd.Cog):
     @configure_cmds.command()
     @utils.autogenerate_options
     async def delete(self, ctx: discord.ApplicationContext):
-        data = await HoyoLabData.load_all(
-            decrypt=False, discord_snowflake=ctx.author.id
-        )
-        if len(data) == 0:
-            await ctx.respond(
-                ephemeral=True,
-                embed=utils.make_embed(
-                    "No Accounts", "No accounts to delete."
-                ),
-            )
+        data = await _get_data(ctx.author.id, decrypt=False)
+        if not data:
+            await ctx.respond(ephemeral=True, embed=data)
             return
 
         async def _del(_data: HoyoLabData, interaction: discord.Interaction):
@@ -605,15 +583,10 @@ class HoyoLab(cmd.Cog):
     @utils.autogenerate_options
     async def settings(self, ctx: discord.ApplicationContext):
         await ctx.defer(ephemeral=True)
-        data = await HoyoLabData.load_all(discord_snowflake=ctx.author.id)
-        if len(data) == 0:
-            await ctx.respond(
-                embed=utils.make_embed(
-                    "No Accounts",
-                    "No accounts to show settings for. "
-                    "You can add some with `/hoyo config cookies`",
-                )
-            )
+        data = await _get_data(ctx.author.id)
+        if not data:
+            await ctx.respond(ephemeral=True, embed=data)
+            return
         await ctx.respond(
             view=discord_menus.DBSelector(
                 data, SettingsView.send, label_key=lambda d: d.display_name
@@ -652,8 +625,13 @@ def _make_client(
     return client
 
 
-async def _get_data(snowflake) -> HoyoLabData | utils.ErrorEmbed:
-    if isinstance(data := await HoyoLabData.load(snowflake), HoyoLabData):
+async def _get_data(
+    snowflake, decrypt: bool = True
+) -> list[HoyoLabData] | utils.ErrorEmbed:
+    data = await HoyoLabData.load_all(
+        decrypt=decrypt, discord_snowflake=snowflake
+    )
+    if len(data) >= 1:
         return data
     return utils.make_error(
         "Failed to Retrieve User Data",
@@ -727,11 +705,11 @@ async def auto_redeem_daily(bot: cmd.Bot):
                     user_id=person.snowflake,
                     bot=bot,
                     embed=utils.make_error(
-                        'Invalid Cookies',
-                        f'Could not redeem any cookies for'
-                        f' `{person.display_name}` as saved '
-                        f'cookies are invalid.'
-                    )
+                        "Invalid Cookies",
+                        f"Could not redeem any cookies for"
+                        f" `{person.display_name}` as saved "
+                        f"cookies are invalid.",
+                    ),
                 )
                 continue
             for account in accounts:
