@@ -60,19 +60,17 @@ class FreeGame(db.Storable):
         else:
             url = None
         image = self.image_url or None
-        return (
+        embed = (
             utils.make_embed(
-                title=f"`{self.name}`",
-                desc=self.desc,
-                url=url,
-            )
+                    title=f"`{self.name}`",
+                    desc=self.desc,
+                    url=url,
+                )
             .set_author(
                 name="Free on the Epic Games Store",
                 url=EPIC_STORE_HOME,
                 icon_url=EPIC_ICON,
             )
-            .set_image(url=image)
-            .add_field(name="Normally", value=self.price_str, inline=True)
             .add_field(
                 name="Start Time",
                 value=f'{utils.format_dt(self.start, "f")}\n'
@@ -86,6 +84,12 @@ class FreeGame(db.Storable):
                 inline=True,
             )
         )
+        if image:
+            embed.set_image(url=image)
+        if self.price_str != "0":
+            embed.add_field(name="Normally", value=self.price_str, inline=True)
+
+        return embed
 
 
 @dc.dataclass
@@ -252,7 +256,7 @@ async def fetch_free_games() -> tuple[list[FreeGame], dt.datetime]:
             end = dt.datetime.fromisoformat(promotion["endDate"])
 
             for img in game["keyImages"]:
-                if img["type"] == "OfferImageWide":
+                if img["type"] in {"OfferImageWide", "DieselStoreFrontWide"}:
                     image_url = img["url"]
                     break
             else:
