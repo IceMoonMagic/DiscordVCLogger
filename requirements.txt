@@ -4,3 +4,4 @@ pynacl~=1.5
 
 requests~=2.31
 genshin~=1.6
+sqlalchemy[asyncio]~=2.0.25

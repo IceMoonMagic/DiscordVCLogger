@@ -1,4 +1,3 @@
-import asyncio
 import datetime as dt
 import json
 import logging
@@ -6,12 +5,21 @@ import os
 import sys
 import tempfile
 import time
-from collections.abc import Iterable
 from logging.handlers import RotatingFileHandler
-from typing import AsyncGenerator, TypeVar
+from typing import TypeVar
 
 import aiosqlite as sql
 import nacl.secret
+from sqlalchemy import (
+    BinaryExpression,
+    DateTime,
+    TypeDecorator,
+    delete,
+    inspect,
+    select,
+)
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
 
 def setup_logging(
@@ -87,82 +95,56 @@ logger = get_logger(__name__)
 
 DB_FILE = r"saves/database.db"
 TEMP_FILE = None
-SQL_CAST = {bool: "bool", int: "int", str: "nvarchar", dt.datetime: "datetime"}
 
 S = TypeVar("S", bound="Storable")
 
 
-class Storable:
-    table_name = "Storable"
-    primary_key_name = "table_name"
+# https://docs.sqlalchemy.org/en/14/core/custom_types.html#store-timezone-aware-timestamps-as-timezone-naive-utc
+class TZDateTime(TypeDecorator):
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = value.astimezone(dt.UTC).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = value.replace(tzinfo=dt.UTC)
+        return value
+
+
+ENGINE = create_async_engine("sqlite://")
+
+
+class Storable(DeclarativeBase):
     temp: bool = False
-    _table_confirmed = None
 
     encrypt_attrs: list = []
     box: nacl.secret.SecretBox | None = None
 
-    def __init_subclass__(cls: type[S], **kwargs):
-        if cls.table_name == super(cls, cls).table_name:
-            cls.table_name = cls.__name__
-
-        if cls.primary_key_name not in cls.__annotations__:
-            raise AttributeError(
-                f"{cls.__class__} has no annotation "
-                f"{cls.primary_key_name}. Available: "
-                f"{list[cls.__annotations__]}"
-            )
-        if cls.primary_key_name in cls.encrypt_attrs:
-            raise AttributeError(
-                f"primary_key_name ({cls.primary_key_name}) "
-                f"may not be encrypted."
-            )
-        super().__init_subclass__()
-
-    def __post_init__(self: S) -> S:
-        for attr, type_ in self.__annotations__.items():
-            if not isinstance(value := getattr(self, attr), type_):
-                if type_ == dt.datetime:
-                    object.__setattr__(
-                        self, attr, dt.datetime.fromisoformat(value)
-                    )
-                else:
-                    object.__setattr__(self, attr, type_(value))
-        return self
-
-    def copy(self: S) -> S:
-        attributes = {}
-        for attribute in self.__annotations__:
-            attributes[attribute] = getattr(self, attribute)
-        return self.__class__(**attributes)
-
-    def update(self: S, *, update_inplace: bool = True, **kwargs) -> S:
-        work_on: S = self if update_inplace else self.copy()
-        for kw, arg in kwargs.items():
-            setattr(work_on, kw, arg)
-        return work_on.__post_init__()
-
     async def save(self: S):
-        if not self.is_ready():
-            raise MissingEncryptionKey(self.__class__)
+        # if not self.is_ready():
+        #     raise MissingEncryptionKey(self.__class__)
+        #
+        # encrypted = {}
+        # unique_chars: int = len(str(len(self.encrypt_attrs)))
+        # primary_value = f"{getattr(self, self.primary_key_name)}"
+        # nonce_base = (
+        #     f"{primary_value[:24 - unique_chars]:0{24 - unique_chars}}"
+        # )
+        # for i, attr in enumerate(self.encrypt_attrs):
+        #     nonce = f"{i:0{unique_chars}}{nonce_base}".encode()
+        #
+        #     raw_value: str = getattr(self, attr)
+        #     bytes_value = raw_value.encode()
+        #     encrypted_value = self.box.encrypt(bytes_value, nonce).ciphertext
+        #     encrypted[attr] = encrypted_value.hex()
 
-        encrypted = {}
-        unique_chars: int = len(str(len(self.encrypt_attrs)))
-        primary_value = f"{getattr(self, self.primary_key_name)}"
-        nonce_base = (
-            f"{primary_value[:24 - unique_chars]:0{24 - unique_chars}}"
-        )
-        for i, attr in enumerate(self.encrypt_attrs):
-            nonce = f"{i:0{unique_chars}}{nonce_base}".encode()
-
-            raw_value: str = getattr(self, attr)
-            bytes_value = raw_value.encode()
-            encrypted_value = self.box.encrypt(bytes_value, nonce).ciphertext
-            encrypted[attr] = encrypted_value.hex()
-
-        await self._wait_for_table()
-        await save_data(
-            self.update(update_inplace=False, **encrypted), assume_exists=True
-        )
+        async with AsyncSession(ENGINE) as session:
+            session.add(self)
+            await session.commit()
 
     def decrypt(self: S, decrypt_inplace: bool = True) -> S:
         work_on: S = self if decrypt_inplace else self.copy()
@@ -190,41 +172,25 @@ class Storable:
     async def load(
         cls: type[S], primary_key, decrypt: bool = True
     ) -> S | None:
-        where = f"{cls.primary_key_name} = {primary_key}"
-        try:
-            obj = await anext(cls.load_gen(where=where, decrypt=decrypt))
-        except StopAsyncIteration:
-            return None
-
-        return obj
+        async with AsyncSession(ENGINE) as session:
+            return await session.get(cls, primary_key)
 
     @classmethod
-    async def load_all(cls: type[S], decrypt: bool = True, **where) -> list[S]:
-        return await load_data_all(cls, decrypt=decrypt, **where)
-
-    @classmethod
-    def load_gen(
-        cls: type[S], decrypt: bool = True, **where
-    ) -> AsyncGenerator[S, None]:
-        return load_data_gen(cls, decrypt=decrypt, **where)
+    async def load_all(
+        cls: type[S], decrypt: bool = True, *where: BinaryExpression
+    ) -> list[S]:
+        async with AsyncSession(ENGINE) as session:
+            stmt = select(cls)
+            for w in where:
+                stmt = stmt.where(w)
+            return (await session.scalars(stmt)).all()
 
     @classmethod
     async def delete(cls, primary_key):
-        where = f"{cls.primary_key_name} = {primary_key}"
-        await cls.delete_all(where=where)
-
-    @classmethod
-    async def delete_all(cls, **where):
-        await delete(cls, **where)
-
-    @classmethod
-    async def _wait_for_table(cls):
-        if cls._table_confirmed is None:
-            cls._table_confirmed = asyncio.create_task(
-                make_table_if_not_exist(cls), name=f"Make {cls.table_name}"
-            )
-        await cls._table_confirmed
-        return
+        pk = inspect(cls).primary_key
+        async with AsyncSession(ENGINE) as session:
+            stmt = delete(cls).where(pk == primary_key)
+            await session.execute(stmt)
 
     @classmethod
     def is_ready(cls) -> bool:
@@ -278,108 +244,3 @@ def delete_temp_file():
     if isinstance(TEMP_FILE, str):
         os.remove(TEMP_FILE)
         TEMP_FILE = None
-
-
-async def make_table(blueprint: Storable | type[Storable]):
-    command = f"CREATE TABLE {blueprint.table_name} ("
-    for var, var_type in blueprint.__annotations__.items():
-        command += f"{var} {SQL_CAST[var_type]}, "
-    command += f"PRIMARY KEY ({blueprint.primary_key_name}) );"
-    await _write_db(command, blueprint.temp)
-
-
-async def make_table_if_not_exist(blueprint: Storable | type[Storable]):
-    if not await does_table_exist(blueprint.table_name, blueprint.temp):
-        await make_table(blueprint)
-
-
-async def _write_db(command: str, temp_db: bool):
-    logger.debug(command)
-    async with sql.connect(get_db_file(temp_db)) as db:
-        await db.execute(command)
-        await db.commit()
-
-
-async def delete(data_type: type[S], **where):
-    if not await does_table_exist(data_type.table_name, data_type.temp):
-        return
-
-    command = (
-        f"DELETE FROM {data_type.table_name} " f"{_generate_where(**where)}"
-    )
-    await _write_db(command, data_type.temp)
-
-
-async def save_data(data: Storable, *, assume_exists: bool = False):
-    # ToDo: update table if exists but different schema
-    assume_exists or await make_table_if_not_exist(data)
-
-    header = f"INSERT OR REPLACE INTO {data.table_name} ("
-    values = "VALUES ("
-    for attribute in data.__annotations__:
-        header += f"{attribute}, "
-        if isinstance(val := getattr(data, attribute), (str, dt.datetime)):
-            values += f'"{val}", '
-        else:
-            values += f"{val}, "
-    command = f"{header[:-2]}) {values[:-2]});"
-
-    await _write_db(command, data.temp)
-
-
-def _generate_where(**where) -> str:
-    if len(where) == 0:
-        return ""
-    elif len(where) == 1 and (key := next(iter(where))).upper() == "WHERE":
-        return (
-            where[key]
-            if "where" in where[key].lower()
-            else f"WHERE {where[key]}"
-        )
-
-    command = "WHERE "
-    for attr, val in where.items():
-        if attr.startswith("not_"):
-            command += "NOT "
-            attr = attr[4:]
-        if isinstance(val, Iterable) and not isinstance(val, str):
-            command += f"{attr} IN {tuple(val)} AND "
-        else:
-            command += f"{attr}={val} AND "
-    return command[:-5].replace(",)", ")")
-
-
-async def load_data_all(
-    data_type: type[S], decrypt: bool = True, **where
-) -> list[S]:
-    if not await does_table_exist(data_type.table_name, data_type.temp):
-        return []
-
-    command = (
-        f"SELECT * FROM {data_type.table_name} " f"{_generate_where(**where)}"
-    )
-    logger.debug(command)
-    async with sql.connect(get_db_file(data_type.temp)) as db:
-        results = await db.execute_fetchall(command)
-    if decrypt:
-        return [data_type(*row).decrypt() for row in results]
-    return [data_type(*row) for row in results]
-
-
-async def load_data_gen(
-    data_type: type[S], decrypt: bool = True, **where
-) -> AsyncGenerator[S, None]:
-    if not await does_table_exist(data_type.table_name, data_type.temp):
-        return
-
-    command = (
-        f"SELECT * FROM {data_type.table_name} " f"{_generate_where(**where)}"
-    )
-    logger.debug(command)
-    async with sql.connect(get_db_file(data_type.temp)) as db:
-        async with db.execute(command) as cursor:
-            async for row in cursor:
-                if decrypt:
-                    yield data_type(*row).decrypt()
-                else:
-                    yield data_type(*row)
