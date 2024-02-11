@@ -1,10 +1,10 @@
 import asyncio
-import dataclasses as dc
 import datetime as dt
 
 import discord
 import discord.ext.commands as cmd
 import requests
+from sqlalchemy.orm import Mapped, mapped_column
 
 import database as db
 import utils
@@ -31,24 +31,17 @@ EPIC_ICON = epic_json.get("store icon", "")
 del epic_json
 
 
-@dc.dataclass(frozen=True)
 class FreeGame(db.Storable):
-    primary_key_name = "_p_key"
-    table_name = "EpicGamesFreeGames"
+    __tablename__ = "EpicGamesFreeGames"
 
-    name: str
-    desc: str
-    page_url: str
-    start: dt.datetime
-    end: dt.datetime
-    price_str: str
-    image_url: str
-    _p_key: int = dc.field(default=None)
-
-    def __post_init__(self: db.S) -> db.S:
-        if self._p_key is None:
-            object.__setattr__(self, "_p_key", hash(self))
-        return super().__post_init__()
+    name: Mapped[str]
+    desc: Mapped[str]
+    page_url: Mapped[str]
+    start: Mapped[dt.datetime] = mapped_column(type_=db.TZDateTime)
+    end: Mapped[dt.datetime] = mapped_column(type_=db.TZDateTime)
+    price_str: Mapped[str]
+    image_url: Mapped[str]
+    _p_key: Mapped[int] = mapped_column(primary_key=None, autoincrement=True)
 
     @property
     def active(self) -> bool:
@@ -62,10 +55,10 @@ class FreeGame(db.Storable):
         image = self.image_url or None
         embed = (
             utils.make_embed(
-                    title=f"`{self.name}`",
-                    desc=self.desc,
-                    url=url,
-                )
+                title=f"`{self.name}`",
+                desc=self.desc,
+                url=url,
+            )
             .set_author(
                 name="Free on the Epic Games Store",
                 url=EPIC_STORE_HOME,
@@ -92,13 +85,14 @@ class FreeGame(db.Storable):
         return embed
 
 
-@dc.dataclass
 class FreeNotifications(db.Storable):
-    primary_key_name = "discord_snowflake"
-    table_name = "EpicGamesNotifications"
+    __tablename__ = "EpicGamesNotifications"
 
-    discord_snowflake: int
-    last_update: dt.datetime = dt.datetime.fromtimestamp(0, tz=dt.timezone.utc)
+    discord_snowflake: Mapped[int] = mapped_column(primary_key=True)
+    last_update: Mapped[dt.datetime] = mapped_column(
+        type_=db.TZDateTime,
+        default=dt.datetime.fromtimestamp(0, tz=dt.timezone.utc),
+    )
 
     @property
     def snowflake(self) -> int:
@@ -159,7 +153,7 @@ class EpicGames(cmd.Cog):
         await ctx.defer()
         if isinstance(to := ctx.channel, discord.PartialMessageable):
             to = ctx.author
-        to_notif = FreeNotifications(to.id)
+        to_notif = FreeNotifications(discord_snowflake=to.id)
         await to_notif.save()
         await ctx.respond(
             embed=utils.make_embed(
