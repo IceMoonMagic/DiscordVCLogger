@@ -28,6 +28,7 @@ def main():
     bot_info = db.get_json_data(__name__)
     bot.owner_ids = bot_info.get("owners", [])
     key = bot_info["key"]
+    db.init_box(bot_info["crypt"])
 
     bot.load_extensions("system", *bot_info.get("extensions", []))
 

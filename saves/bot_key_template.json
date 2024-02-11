@@ -1,6 +1,7 @@
 {
   "__main__": {
     "key": "BotKey",
+    "crypt": "32 Character Crypt Key",
     "owners": [],
     "extensions": [
       "extensions.epic_games",

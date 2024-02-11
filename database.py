@@ -89,6 +89,15 @@ def get_json_data(key: str = "") -> dict:
     return data
 
 
+def init_box(key: bytes | str):
+    global BOX
+    if isinstance(key, str):
+        key = key.encode()
+    if (length := len(key)) < 32:
+        key += b" " * (32 - length)
+    BOX = nacl.secret.SecretBox(key)
+
+
 JSON_PATH = r"saves/bot_key.json"
 
 LOG_NAME = "discord_bot"
@@ -97,7 +106,7 @@ logger = get_logger(__name__)
 DB_FILE = r"saves/database.db"
 TEMP_FILE = None
 
-BOX = nacl.secret.SecretBox(b"Change Hard Coded Encryption Key")
+BOX: nacl.secret.SecretBox | None = None
 
 S = TypeVar("S", bound="Storable")
 
@@ -107,9 +116,13 @@ class EncryptedStr(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value: str, dialect) -> bytes:
+        if BOX is None:
+            raise MissingEncryptionKey
         return BOX.encrypt(value.encode())
 
     def process_result_value(self, value: bytes, dialect) -> str:
+        if BOX is None:
+            raise MissingEncryptionKey
         return BOX.decrypt(value).decode()
 
 
