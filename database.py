@@ -6,7 +6,7 @@ import sys
 import tempfile
 import time
 from logging.handlers import RotatingFileHandler
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import aiosqlite as sql
 import nacl.secret
@@ -178,7 +178,13 @@ class Storable(DeclarativeBase):
             return (await session.scalars(stmt)).all()
 
     @classmethod
-    async def delete(cls, primary_key):
+    async def delete(cls: type[S], primary_key: Any | S):
+        if isinstance(primary_key, cls):
+            async with AsyncSession(ENGINE) as session:
+                await session.delete(primary_key)
+                await session.commit()
+                return
+
         pk = inspect(cls).primary_key
         async with AsyncSession(ENGINE) as session:
             stmt = delete(cls).where(pk == primary_key)
