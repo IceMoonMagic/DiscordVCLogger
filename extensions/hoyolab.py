@@ -1,11 +1,11 @@
 import asyncio
-import dataclasses as dc
 import datetime as dt
 
 import discord
 import discord.ext.commands as cmd
 import genshin
 from discord.ext.tasks import loop
+from sqlalchemy.orm import Mapped, QueryableAttribute, mapped_column
 
 import database as db
 import discord_menus
@@ -28,20 +28,15 @@ def teardown(bot: cmd.Bot):
     auto_redeem_daily.stop()
 
 
-@dc.dataclass
 class HoyoLabData(db.Storable):
-    primary_key_name = "_account_id"
-
-    encrypt_attrs = ["cookie_token"]
-
-    discord_snowflake: int
-    _account_id: int
-    cookie_token: str
-    nickname: str = ""
-    v2: bool = True  # if using v2 Cookies
+    discord_snowflake: Mapped[int]
+    _account_id: Mapped[int] = mapped_column(primary_key=True)
+    cookie_token: Mapped[str] = mapped_column(type_=db.EncryptedStr)
+    nickname: Mapped[str] = ""
+    v2: Mapped[bool] = True  # if using v2 Cookies
     # ToDo: Implement for each `genshin.Game` (Genshin, Honkai3rd, Starrail)
-    auto_daily: bool = True
-    auto_codes: bool = True
+    auto_daily: Mapped[bool] = True
+    auto_codes: Mapped[bool] = True
 
     @property
     def snowflake(self) -> int:
@@ -131,7 +126,7 @@ class CookieModal(discord.ui.Modal):
 
         count, data = 0, None
         for account in await HoyoLabData.load_all(
-            decrypt=False, discord_snowflake=interaction.user.id
+            HoyoLabData.discord_snowflake == interaction.user.id
         ):
             if account.account_id == account_id:
                 data = account
@@ -371,19 +366,19 @@ class HoyoLab(cmd.Cog):
         genshin.Game, "The game to run the command for."
     )
 
-    @cmd.Cog.listener("on_ready")
-    async def unlock_reminder(self):
-        await asyncio.sleep(5 * 60)
-        if HoyoLabData.box is None:
-            for user_id in self.bot.owner_ids or [self.bot.owner_id]:
-                dm = await utils.get_dm(user_id, self.bot)
-                await dm.send(
-                    embed=utils.make_embed(
-                        "Unlock HoyoLabData",
-                        "The bot is ready, but HoyoLabData "
-                        "still can't be encrypted/decrypted.",
-                    )
-                )
+    # @cmd.Cog.listener("on_ready")
+    # async def unlock_reminder(self):
+    #     await asyncio.sleep(5 * 60)
+    #     if HoyoLabData.box is None:
+    #         for user_id in self.bot.owner_ids or [self.bot.owner_id]:
+    #             dm = await utils.get_dm(user_id, self.bot)
+    #             await dm.send(
+    #                 embed=utils.make_embed(
+    #                     "Unlock HoyoLabData",
+    #                     "The bot is ready, but HoyoLabData "
+    #                     "still can't be encrypted/decrypted.",
+    #                 )
+    #             )
 
     # @daily_rewards_cmds.command()
     @utils.autogenerate_options
@@ -442,7 +437,7 @@ class HoyoLab(cmd.Cog):
         code = code.strip().upper()
         client: genshin.Client | None = None
         for account in await HoyoLabData.load_all(
-            discord_snowflake=ctx.author.id
+            HoyoLabData.discord_snowflake == ctx.author.id
         ):
             check = await _check_cookies(account)
             if not check:
@@ -479,7 +474,9 @@ class HoyoLab(cmd.Cog):
         async with asyncio.TaskGroup() as tg:
             tg.create_task(utils.send_dm(ctx.author.id, ctx.bot, embed=embed))
 
-            async for person in HoyoLabData.load_gen(auto_codes=True):
+            for person in await HoyoLabData.load_all(
+                HoyoLabData.auto_codes.is_(True)
+            ):
                 if person.snowflake == ctx.author.id:
                     continue
 
@@ -532,7 +529,7 @@ class HoyoLab(cmd.Cog):
             ephemeral=True,
             view=CookieView(),
         )
-        count = len(await _get_data(ctx.author.id, decrypt=False))
+        count = await HoyoLabData.count()
         await ctx.respond(
             ephemeral=True, embed=CookieView.make_limit_embed(count)
         )
@@ -555,14 +552,14 @@ class HoyoLab(cmd.Cog):
     @configure_cmds.command()
     @utils.autogenerate_options
     async def delete(self, ctx: discord.ApplicationContext):
-        data = await _get_data(ctx.author.id, decrypt=False)
+        data = await _get_data(ctx.author.id, defer=HoyoLabData.cookie_token)
         if not data:
             await ctx.respond(ephemeral=True, embed=data)
             return
 
         async def _del(_data: HoyoLabData, interaction: discord.Interaction):
             display_name = _data.display_name
-            await HoyoLabData.delete(getattr(_data, _data.primary_key_name))
+            await HoyoLabData.delete(_data)
             await interaction.response.send_message(
                 ephemeral=True,
                 embed=utils.make_embed(
@@ -593,19 +590,19 @@ class HoyoLab(cmd.Cog):
             )
         )
 
-    @cmd.is_owner()
-    @hoyolab_cmds.command()
-    async def unlock(self, ctx: discord.ApplicationContext):
-        await ctx.send_modal(utils.UnlockModal(HoyoLabData))
-
-    @cmd.is_owner()
-    @hoyolab_cmds.command()
-    async def lock(self, ctx: discord.ApplicationContext):
-        HoyoLabData.clear_key()
-        await ctx.respond(
-            embed=utils.make_embed("HoyoLabData Locked", ctx=ctx),
-            ephemeral=True,
-        )
+    # @cmd.is_owner()
+    # @hoyolab_cmds.command()
+    # async def unlock(self, ctx: discord.ApplicationContext):
+    #     await ctx.send_modal(utils.UnlockModal(HoyoLabData))
+    #
+    # @cmd.is_owner()
+    # @hoyolab_cmds.command()
+    # async def lock(self, ctx: discord.ApplicationContext):
+    #     HoyoLabData.clear_key()
+    #     await ctx.respond(
+    #         embed=utils.make_embed("HoyoLabData Locked", ctx=ctx),
+    #         ephemeral=True,
+    #     )
 
     @cmd.is_owner()
     @daily_rewards_cmds.command()
@@ -626,10 +623,10 @@ def _make_client(
 
 
 async def _get_data(
-    snowflake, decrypt: bool = True
+    snowflake, defer: list[QueryableAttribute] = None
 ) -> list[HoyoLabData] | utils.ErrorEmbed:
     data = await HoyoLabData.load_all(
-        decrypt=decrypt, discord_snowflake=snowflake
+        HoyoLabData.discord_snowflake == snowflake, defer_=defer
     )
     if len(data) >= 1:
         return data
@@ -640,6 +637,7 @@ async def _get_data(
     )
 
 
+# ToDo: Update _get_client and dependants with account selector
 async def _get_client(
     snowflake: int, game: genshin.Game = genshin.Game.GENSHIN
 ) -> genshin.Client | utils.ErrorEmbed:
@@ -697,7 +695,9 @@ async def auto_redeem_daily(bot: cmd.Bot):
         await utils.do_and_dm(**kwargs)
 
     async with asyncio.TaskGroup() as tg:
-        async for person in HoyoLabData.load_gen(auto_daily=True):
+        for person in await HoyoLabData.load_all(
+            HoyoLabData.auto_daily.is_(True)
+        ):
             try:
                 accounts = await _make_client(person).get_game_accounts()
             except genshin.InvalidCookies:
