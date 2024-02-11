@@ -6,6 +6,7 @@ from collections.abc import Collection
 
 import discord
 import discord.ext.commands as cmds
+from sqlalchemy.orm import Mapped, mapped_column
 
 import database as db
 import utils
@@ -94,31 +95,15 @@ class VoiceStateChange(enum.Enum):
         return changes
 
 
-@dc.dataclass(frozen=True)
 class VoiceStateChangeLog(db.Storable):
-    primary_key_name = "_p_key"
     temp = True
 
-    guild_id: int
-    channel_id: int
-    user_id: int
-    change_name: str
-    time: dt.datetime = dc.field(default_factory=utils.utcnow)
-    _p_key: int = dc.field(default=None)
-
-    def __post_init__(self: db.S) -> db.S:
-        if self._p_key is None:
-            object.__setattr__(self, "_p_key", hash(self))
-        return super().__post_init__()
-
-    def __hash__(self):
-        return hash(
-            f"{self.guild_id}"
-            f"{self.channel_id}"
-            f"{self.user_id}"
-            f"{self.change_name}"
-            f"{self.time.timestamp()}"
-        )
+    guild_id: Mapped[int]
+    channel_id: Mapped[int]
+    user_id: Mapped[int]
+    change_name: Mapped[str]
+    time: Mapped[dt.datetime] = mapped_column(default=utils.utcnow)
+    _p_key: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     @property
     def change(self) -> VoiceStateChange:
@@ -333,7 +318,7 @@ async def _log_changes(
         if change == VoiceStateChange.channel_leave:
             if len(old_state.channel.voice_states) == 0:
                 await VoiceStateChangeLog.delete_all(
-                    channel_id=old_state.channel.id
+                    VoiceStateChangeLog.channel_id == old_state.channel.id
                 )
                 continue
             channel_id = old_state.channel.id
@@ -436,19 +421,21 @@ async def _vc_log_embed(
 
     voices = set(vc.voice_states)
     if only_present:
-        options = {"user_id": voices}
+        options = [VoiceStateChangeLog.user_id.in_(voices)]
     elif only_present is None:
-        options = {"not_user_id": voices}
+        options = [VoiceStateChangeLog.user_id.notin_(voices)]
     else:
-        options = {}
+        options = []
 
     if vsc_types is None or len(vsc_types) == 0:
-        vsc_types: tuple[str] = tuple(VoiceStateChange.__members__)
+        vsc_types: tuple[str, ...] = tuple(VoiceStateChange.__members__)
     else:
-        vsc_types: tuple[str] = tuple(vsc.name for vsc in vsc_types)
+        vsc_types: tuple[str, ...] = tuple(vsc.name for vsc in vsc_types)
 
     events = await VoiceStateChangeLog.load_all(
-        channel_id=vc.id, change_name=[vsc for vsc in vsc_types], **options
+        VoiceStateChangeLog.channel_id == vc.id,
+        VoiceStateChangeLog.change_name.in_(vsc for vsc in vsc_types),
+        *options,
     )
 
     if amount == -1:
