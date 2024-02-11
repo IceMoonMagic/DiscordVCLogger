@@ -26,6 +26,8 @@ from sqlalchemy.orm import (
     QueryableAttribute,
     defer,
 )
+from sqlalchemy.sql.functions import count
+from sqlalchemy import func
 
 
 def setup_logging(
@@ -157,6 +159,14 @@ class Storable(DeclarativeBase):
         async with AsyncSession(ENGINE) as session:
             session.add(self)
             await session.commit()
+
+    @classmethod
+    async def count(cls, *where: BinaryExpression) -> int:
+        async with AsyncSession(ENGINE) as session:
+            stmt = select(func.count()).select_from(cls)
+            for w in where:
+                stmt = stmt.where(w)
+            return await session.scalar(stmt)
 
     @classmethod
     async def load(cls: type[S], primary_key) -> S | None:
