@@ -20,7 +20,12 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    InstrumentedAttribute,
+    QueryableAttribute,
+    defer,
+)
 
 
 def setup_logging(
@@ -159,11 +164,17 @@ class Storable(DeclarativeBase):
             return await session.get(cls, primary_key)
 
     @classmethod
-    async def load_all(cls: type[S], *where: BinaryExpression) -> list[S]:
+    async def load_all(
+        cls: type[S],
+        *where: BinaryExpression,
+        defer_: list[QueryableAttribute] = None,
+    ) -> list[S]:
         async with AsyncSession(ENGINE) as session:
             stmt = select(cls)
             for w in where:
                 stmt = stmt.where(w)
+            if defer is not None:
+                stmt = stmt.options(defer(*defer_))
             return (await session.scalars(stmt)).all()
 
     @classmethod
@@ -171,6 +182,14 @@ class Storable(DeclarativeBase):
         pk = inspect(cls).primary_key
         async with AsyncSession(ENGINE) as session:
             stmt = delete(cls).where(pk == primary_key)
+            await session.execute(stmt)
+
+    @classmethod
+    async def delete_all(cls, *where: BinaryExpression):
+        async with AsyncSession(ENGINE) as session:
+            stmt = delete(cls)
+            for w in where:
+                stmt = stmt.where(w)
             await session.execute(stmt)
 
 
