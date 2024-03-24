@@ -41,7 +41,7 @@ class FreeGame(db.Storable):
     end: Mapped[dt.datetime] = mapped_column(type_=db.TZDateTime)
     price_str: Mapped[str]
     image_url: Mapped[str]
-    _p_key: Mapped[int] = mapped_column(primary_key=None, autoincrement=True)
+    _p_key: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     @property
     def active(self) -> bool:
@@ -198,7 +198,7 @@ class EpicGames(cmd.Cog):
     @epic_cmds.command()
     async def hard_reset(self, ctx: discord.ApplicationContext):
         await ctx.defer()
-        if not (self.check_loop is None) and not self.check_loop.done():
+        if self.check_loop is not None and not self.check_loop.done():
             self.check_loop.cancel()
             self.check_loop = asyncio.create_task(games_check_loop(self.bot))
         await ctx.respond(
@@ -213,12 +213,12 @@ class EpicGames(cmd.Cog):
 async def games_check_loop(bot: cmd.Bot):
     while len(notif := await FreeNotifications.load_all()) > 0:
         fetched_games, next_update = await fetch_free_games()
-        await FreeGame.delete_all()
-        for game in fetched_games:
-            await game.save()
         async with asyncio.TaskGroup() as tg:
             for n in notif:
                 tg.create_task(n.send_games(bot, fetched_games))
+            tg.create_task(FreeGame.delete_all())
+        for game in fetched_games:
+            await game.save()
         sleep = next_update - utils.utcnow()
         await asyncio.sleep(sleep.total_seconds())
 

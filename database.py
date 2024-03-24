@@ -14,6 +14,7 @@ from sqlalchemy import (
     BinaryExpression,
     DateTime,
     LargeBinary,
+    StaticPool,
     TypeDecorator,
     delete,
     inspect,
@@ -22,11 +23,9 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import (
     DeclarativeBase,
-    InstrumentedAttribute,
     QueryableAttribute,
     defer,
 )
-from sqlalchemy.sql.functions import count
 from sqlalchemy import func
 
 
@@ -105,6 +104,13 @@ def init_box(key: bytes | str):
     BOX = nacl.secret.SecretBox(key)
 
 
+async def init_tables(drop_tables: bool = False):
+    async with ENGINE.begin() as conn:
+        if drop_tables:
+            await conn.run_sync(Storable.metadata.drop_all)
+        await conn.run_sync(Storable.metadata.create_all)
+
+
 JSON_PATH = r"saves/bot_key.json"
 
 LOG_NAME = "discord_bot"
@@ -149,7 +155,9 @@ class TZDateTime(TypeDecorator):
         return value
 
 
-ENGINE = create_async_engine("sqlite+aiosqlite://")
+ENGINE = create_async_engine(
+    "sqlite+aiosqlite:///saves/database.db", poolclass=StaticPool
+)
 
 
 class Storable(DeclarativeBase):
@@ -183,7 +191,7 @@ class Storable(DeclarativeBase):
             stmt = select(cls)
             for w in where:
                 stmt = stmt.where(w)
-            if defer is not None:
+            if defer_ is not None:
                 stmt = stmt.options(defer(*defer_))
             return (await session.scalars(stmt)).all()
 
@@ -197,8 +205,9 @@ class Storable(DeclarativeBase):
 
         pk = inspect(cls).primary_key
         async with AsyncSession(ENGINE) as session:
-            stmt = delete(cls).where(pk == primary_key)
+            stmt = delete(cls).where(pk[0] == primary_key)
             await session.execute(stmt)
+            await session.commit()
 
     @classmethod
     async def delete_all(cls, *where: BinaryExpression):
@@ -207,6 +216,7 @@ class Storable(DeclarativeBase):
             for w in where:
                 stmt = stmt.where(w)
             await session.execute(stmt)
+            await session.commit()
 
 
 class MissingEncryptionKey(RuntimeError):

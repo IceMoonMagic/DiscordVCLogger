@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import logging
 
 import discord.ext.commands as cmd
@@ -33,7 +34,7 @@ def main():
     bot.load_extensions("system", *bot_info.get("extensions", []))
 
     del bot_info
-
+    asyncio.run(db.init_tables())
     bot.run(key)
     db.delete_temp_file()
     logger.info("Shutdown Complete, End of Process")

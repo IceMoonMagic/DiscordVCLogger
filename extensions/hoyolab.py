@@ -29,6 +29,8 @@ def teardown(bot: cmd.Bot):
 
 
 class HoyoLabData(db.Storable):
+    __tablename__ = "HoyoLabData"
+
     discord_snowflake: Mapped[int]
     _account_id: Mapped[int] = mapped_column(primary_key=True)
     cookie_token: Mapped[str] = mapped_column(type_=db.EncryptedStr)

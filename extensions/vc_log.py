@@ -1,5 +1,4 @@
 """Code to let a bot to track joins and disconnects of Discord voice channels"""
-import dataclasses as dc
 import datetime as dt
 import enum
 from collections.abc import Collection
@@ -96,7 +95,8 @@ class VoiceStateChange(enum.Enum):
 
 
 class VoiceStateChangeLog(db.Storable):
-    temp = True
+    __tablename__ = "VoiceStateChangeLog"
+    __table_args__ = {"prefixes": ["TEMPORARY"]}
 
     guild_id: Mapped[int]
     channel_id: Mapped[int]
