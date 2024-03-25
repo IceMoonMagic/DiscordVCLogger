@@ -687,7 +687,7 @@ async def _redeem_daily(
 
 
 # @loop(time=dt.time(0, 5, 5, tzinfo=dt.timezone(dt.timedelta(hours=8))))
-@loop(time=dt.time(16, 15, 5))
+@loop(time=dt.time(16, 0, 5))
 async def auto_redeem_daily(bot: cmd.Bot):
     logger.info("Automatically claiming daily rewards.")
     from random import randint
