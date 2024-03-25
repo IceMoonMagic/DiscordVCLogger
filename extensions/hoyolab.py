@@ -34,11 +34,11 @@ class HoyoLabData(db.Storable):
     discord_snowflake: Mapped[int]
     _account_id: Mapped[int] = mapped_column(primary_key=True)
     cookie_token: Mapped[str] = mapped_column(type_=db.EncryptedStr)
-    nickname: Mapped[str] = ""
-    v2: Mapped[bool] = True  # if using v2 Cookies
+    nickname: Mapped[str] = mapped_column(default="")
+    v2: Mapped[bool] = mapped_column(default=True)  # if using v2 Cookies
     # ToDo: Implement for each `genshin.Game` (Genshin, Honkai3rd, Starrail)
-    auto_daily: Mapped[bool] = True
-    auto_codes: Mapped[bool] = True
+    auto_daily: Mapped[bool] = mapped_column(default=True)
+    auto_codes: Mapped[bool] = mapped_column(default=True)
 
     @property
     def snowflake(self) -> int:
