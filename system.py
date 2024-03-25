@@ -180,7 +180,7 @@ class System(cmd.Cog):
         await ctx.respond(embed=utils.make_error(title, desc))
 
         if raise_it:
-            raise cause
+            logger.error("Unexpected exception occurred", exc_info=cause)
 
 
 def add_shutdown_step(bot: cmd.Bot, coro: Coroutine):
