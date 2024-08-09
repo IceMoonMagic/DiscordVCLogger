@@ -1,4 +1,5 @@
 """Code to let a bot to track joins and disconnects of Discord voice channels"""
+
 import datetime as dt
 import enum
 from collections.abc import Collection
@@ -103,7 +104,9 @@ class VoiceStateChangeLog(db.Storable):
     user_id: Mapped[int]
     change_name: Mapped[str]
     change_value: Mapped[bool]
-    time: Mapped[dt.datetime] = mapped_column(default=utils.utcnow)
+    time: Mapped[dt.datetime] = mapped_column(
+        default=utils.utcnow, type_=db.TZDateTime
+    )
     _p_key: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     @property
@@ -152,6 +155,25 @@ class VcLog(cmds.Cog):
 
     log_command_group = discord.SlashCommandGroup("vclog", "foo")
 
+    @staticmethod
+    def _determine_voice_channel(
+        ctx: discord.ApplicationContext,
+        channel: VOICE_STATE_CHANNELS = None,
+    ) -> VOICE_STATE_CHANNELS | utils.ErrorEmbed:
+        if isinstance(channel, VOICE_STATE_CHANNELS):
+            return channel
+        elif isinstance(ctx.channel, VOICE_STATE_CHANNELS):
+            return ctx.channel
+        elif ctx.user.voice is not None and isinstance(
+            ctx.user.voice.channel, VOICE_STATE_CHANNELS
+        ):
+            return ctx.user.voice.channel
+        else:
+            return utils.make_error(
+                title="Could not fetch VC Log",
+                desc="You're not in a Voice Channel.",
+            )
+
     @log_command_group.command()
     @utils.autogenerate_options
     async def joined(
@@ -172,17 +194,15 @@ class VcLog(cmds.Cog):
         :param time_format: The character for the discord timestamp
         """
         await ctx.defer()
-        await ctx.respond(
-            embed=await _vc_log_embed(
-                ctx=ctx,
-                vsc_types=[VoiceStateChange.channel_join],
-                amount=amount,
-                channel=channel,
-                ignore_empty=False,
-                only_present=True,
-                time_format=time_format,
-            )
+        if not (vc := self._determine_voice_channel(ctx, channel)):
+            await ctx.respond(embed=vc)
+        events = await fetch_channel_records(
+            channel_ids=[vc.id],
+            user_ids=list(vc.voice_states),
+            changes=[VoiceStateChange.channel_join],
+            amount=amount,
         )
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
 
     @log_command_group.command()
     @utils.autogenerate_options
@@ -204,17 +224,15 @@ class VcLog(cmds.Cog):
         :param time_format: The character for the discord timestamp
         """
         await ctx.defer()
-        await ctx.respond(
-            embed=await _vc_log_embed(
-                ctx=ctx,
-                vsc_types=[VoiceStateChange.channel_leave],
-                amount=amount,
-                channel=channel,
-                ignore_empty=False,
-                only_present=None,
-                time_format=time_format,
-            )
+        if not (vc := self._determine_voice_channel(ctx, channel)):
+            await ctx.respond(embed=vc)
+        events = await fetch_channel_records(
+            channel_ids=[vc.id],
+            exclude_user_ids=list(vc.voice_states),
+            changes=[VoiceStateChange.channel_leave],
+            amount=amount,
         )
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
 
     @log_command_group.command()
     @utils.autogenerate_options
@@ -224,9 +242,8 @@ class VcLog(cmds.Cog):
         *,
         channel: VOICE_STATE_CHANNELS | None = None,
         amount: int = -1,
-        ignore_empty: bool = True,
         remove_dupes: bool = True,
-        remove_undo: bool = True,
+        remove_undo: bool = False,
         time_format: utils.time_format_option = "R",
     ):
         """
@@ -235,7 +252,6 @@ class VcLog(cmds.Cog):
         :param ctx: Application Context form Discord.
         :param channel: Channel to get logs from.
         :param amount: Number of entries to show. -1 = all
-        :param ignore_empty: Weather or not to hide empty categories.
         :param remove_dupes:
         Only show the most recent of the event type for the member
         :param remove_undo:
@@ -243,18 +259,23 @@ class VcLog(cmds.Cog):
         :param time_format: The time format to display the logs
         """
         await ctx.defer()
-        await ctx.respond(
-            embed=await _vc_log_embed(
-                ctx=ctx,
-                amount=amount,
-                channel=channel,
-                ignore_empty=ignore_empty,
-                only_present=False,
-                remove_dupes=remove_dupes,
-                remove_undo=remove_undo,
-                time_format=time_format,
+        if not remove_dupes and remove_undo:
+            await ctx.respond(
+                embed=utils.make_error(
+                    "Invalid Arguments",
+                    "`remove_undo` must be `False` "
+                    "if `remove_dupes` is `False`",
+                )
             )
+        if not (vc := self._determine_voice_channel(ctx, channel)):
+            await ctx.respond(embed=vc)
+        events = await fetch_channel_records(
+            channel_ids=[vc.id],
+            remove_dupes=remove_dupes,
+            remove_undo=remove_undo,
+            amount=amount,
         )
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
 
     @log_command_group.command()
     @utils.autogenerate_options
@@ -266,10 +287,10 @@ class VcLog(cmds.Cog):
         *,
         channel: VOICE_STATE_CHANNELS = None,
         amount: int = -1,
-        ignore_empty: bool = False,
         remove_dupes: bool = True,
-        remove_undo: bool = True,
-        only_present: bool = False,
+        remove_undo: bool = False,
+        include_present: bool = True,
+        include_absent: bool = True,
         time_format: utils.time_format_option = "R",
     ):
         """
@@ -280,8 +301,8 @@ class VcLog(cmds.Cog):
         :param include_alt: Display the "opposite" VSC type.
         :param channel: Channel to get logs from.
         :param amount: Number of entries to show. -1 = all
-        :param ignore_empty: Weather or not to hide empty categories.
-        :param only_present: Skip members not in selected VC
+        :param include_present: Include members currently in selected VC
+        :param include_absent: Include members not currently in selected VC
         :param remove_dupes:
         Only show the most recent of the event type for the member
         :param remove_undo:
@@ -289,23 +310,51 @@ class VcLog(cmds.Cog):
         :param time_format: The time format to display the logs
         """
         await ctx.defer()
+        if not remove_dupes and remove_undo:
+            await ctx.respond(
+                embed=utils.make_error(
+                    "Invalid Arguments",
+                    "`remove_undo` must be `False` "
+                    "if `remove_dupes` is `False`",
+                )
+            )
         vsc_types = [VoiceStateChange[include]]
         if include_alt:
             vsc_types.append(vsc_types[0].opposite)
 
-        await ctx.respond(
-            embed=await _vc_log_embed(
-                ctx=ctx,
-                vsc_types=vsc_types,
-                amount=amount,
-                channel=channel,
-                ignore_empty=ignore_empty,
-                only_present=only_present,
+        if not (vc := self._determine_voice_channel(ctx, channel)):
+            await ctx.respond(embed=vc)
+
+        # ToDo: Find way to not have three *slightly* different calls
+        if include_present and include_absent:
+            events = await fetch_channel_records(
+                channel_ids=[vc.id],
+                changes=[VoiceStateChange.channel_join],
                 remove_dupes=remove_dupes,
                 remove_undo=remove_undo,
-                time_format=time_format,
+                amount=amount,
             )
-        )
+        elif include_present:
+            events = await fetch_channel_records(
+                channel_ids=[vc.id],
+                user_ids=list(vc.voice_states),
+                changes=[VoiceStateChange.channel_join],
+                remove_dupes=remove_dupes,
+                remove_undo=remove_undo,
+                amount=amount,
+            )
+        elif include_absent:
+            events = await fetch_channel_records(
+                channel_ids=[vc.id],
+                exclude_user_ids=list(vc.voice_states),
+                changes=[VoiceStateChange.channel_join],
+                remove_dupes=remove_dupes,
+                remove_undo=remove_undo,
+                amount=amount,
+            )
+        else:
+            events = []
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
 
 
 async def _log_changes(
@@ -329,7 +378,8 @@ async def _log_changes(
             guild_id=guild_id,
             channel_id=channel_id,
             user_id=member_id,
-            change_name=change.name,
+            change_name=change.value[0],
+            change_value=change.value[1],
             time=time,
         ).save()
 
@@ -382,6 +432,7 @@ async def fetch_channel_records(
     guild_ids: list[int] = None,
     channel_ids: list[int] = None,
     user_ids: list[int] = None,
+    exclude_user_ids: list[int] = None,
     changes: list[VoiceStateChange] = None,
     remove_dupes: bool = False,
     remove_undo: bool = False,
@@ -393,6 +444,7 @@ async def fetch_channel_records(
     :param guild_ids: Only fetch records from <guilds>
     :param channel_ids: Only fetch records from <channels>
     :param user_ids: Only fetch records from <users>
+    :param exclude_user_ids: Ignore records from <users>
     :param changes: Only fetch records of <VoiceStateChanges>
     :param remove_dupes:
     Only fetch the most recent of the event per type per toggle per member
@@ -417,6 +469,8 @@ async def fetch_channel_records(
         stmt = stmt.where(VoiceStateChangeLog.channel_id.in_(channel_ids))
     if user_ids:
         stmt = stmt.where(VoiceStateChangeLog.user_id.in_(user_ids))
+    if exclude_user_ids:
+        stmt = stmt.where(VoiceStateChangeLog.user_id.notin_(exclude_user_ids))
     if changes:
         # TODO
         stmt = stmt.where(
@@ -456,80 +510,22 @@ async def fetch_channel_records(
         return list((await session.scalars(stmt)).all())
 
 
-# ToDo: Breakup _vc_log_embed
-async def _vc_log_embed(
-    ctx: discord.ApplicationContext,
-    vsc_types: Collection[VoiceStateChange] | None = None,
-    amount: int = -1,
-    only_present: bool | None = True,
-    channel: VOICE_STATE_CHANNELS | None = None,
+def _vc_log_embed(
+    events: list[VoiceStateChangeLog],
     time_format: utils.TimestampStyle = "R",
-    ignore_empty: bool = True,
-    remove_dupes: bool = True,
-    remove_undo: bool = True,
+    ctx: discord.ApplicationContext = None,
 ) -> discord.Embed:
     """
-    Creates an embed with for the VC Log
+    Creates an embed for the given logs
 
-    :param ctx: Application Context form Discord.
-    :param vsc_types: VoiceStateChanges to include
-    :param amount: Number of events to show (in reverse chronological order)
-    :param only_present: Only include members in the selected voice channel
-    :param channel: The Voice Channel to show the logs of
+    :param events: The events to embed
     :param time_format: The character for the discord timestamp
-    :param ignore_empty: Ignore VoiceStateChanges that have no entries
-    :param remove_dupes:
-    Only show the most recent of the event type for the member
-    :param remove_undo:
-    Only show events that have been "undone" by a more recent event
-    :return: An embed of the logs for the channel
+    :return: An embed of the given logs
     """
-    if isinstance(channel, VOICE_STATE_CHANNELS):
-        vc = channel
-    elif isinstance(ctx.channel, VOICE_STATE_CHANNELS):
-        vc = ctx.channel
-    elif ctx.user.voice is not None and isinstance(
-        ctx.user.voice.channel, VOICE_STATE_CHANNELS
-    ):
-        vc = ctx.user.voice.channel
-    else:
-        return utils.make_error(
-            title="Could not fetch VC Log",
-            desc="You're not in a Voice Channel.",
-        )
-
-    voices = set(vc.voice_states)
-    if only_present:
-        options = [VoiceStateChangeLog.user_id.in_(voices)]
-    elif only_present is None:
-        options = [VoiceStateChangeLog.user_id.notin_(voices)]
-    else:
-        options = []
-
-    if vsc_types is None or len(vsc_types) == 0:
-        vsc_types: tuple[str, ...] = tuple(VoiceStateChange.__members__)
-    else:
-        vsc_types: tuple[str, ...] = tuple(vsc.name for vsc in vsc_types)
-
-    events = await VoiceStateChangeLog.load_all(
-        VoiceStateChangeLog.channel_id == vc.id,
-        VoiceStateChangeLog.change_name.in_(vsc for vsc in vsc_types),
-        *options,
-    )
-
-    if amount == -1:
-        amount = len(events)
-    iterator = (e for i, e in zip(range(amount), reversed(events)))
-
     fields = {}
-    for event in iterator:
-        existing = fields.get(event.change_name, "")
+    for event in events:
+        existing = fields.get(event.change.name, "")
         mention = f"<@{event.user_id}>"
-        if (remove_dupes and mention in existing) or (
-            remove_undo
-            and mention in fields.get(event.change.opposite.name, "")
-        ):
-            continue
         time_str = utils.format_dt(event.time, time_format)
         line = f"- {mention} {time_str}\n"
         if len(existing + line) > 1023:
@@ -537,12 +533,8 @@ async def _vc_log_embed(
         else:
             fields[event.change_name] = existing + line
 
-    embed = utils.make_embed(
-        title=f"Voice Event history in `{vc.name}`:", ctx=ctx
-    )
-    for field in vsc_types:
-        if ignore_empty and field not in fields:
-            continue
+    embed = utils.make_embed(title=f"Voice Event History", ctx=ctx)
+    for field, event_str in fields.items():
         # ToDo: Inline with opposite
         embed.add_field(
             name=field.replace("_", " ").title() + "s",
