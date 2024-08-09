@@ -102,12 +102,13 @@ class VoiceStateChangeLog(db.Storable):
     channel_id: Mapped[int]
     user_id: Mapped[int]
     change_name: Mapped[str]
+    change_value: Mapped[bool]
     time: Mapped[dt.datetime] = mapped_column(default=utils.utcnow)
     _p_key: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     @property
     def change(self) -> VoiceStateChange:
-        return getattr(VoiceStateChange, self.change_name)
+        return VoiceStateChange(self.change_name, self.change_value)
 
 
 class VcLog(cmds.Cog):
@@ -375,6 +376,84 @@ async def _log_reconciliation(bot: discord.Bot):
                     old_state=presumed_state,
                     new_state=voice_state,
                 )
+
+
+async def fetch_channel_records(
+    guild_ids: list[int] = None,
+    channel_ids: list[int] = None,
+    user_ids: list[int] = None,
+    changes: list[VoiceStateChange] = None,
+    remove_dupes: bool = False,
+    remove_undo: bool = False,
+    amount: int = -1,
+) -> list[VoiceStateChangeLog]:
+    """
+    Fetches a group of VoiceStateChangeLogs
+
+    :param guild_ids: Only fetch records from <guilds>
+    :param channel_ids: Only fetch records from <channels>
+    :param user_ids: Only fetch records from <users>
+    :param changes: Only fetch records of <VoiceStateChanges>
+    :param remove_dupes:
+    Only fetch the most recent of the event per type per toggle per member
+    :param remove_undo: Don't consider toggle on / off with remove_dupes
+    :param amount: Number of events to show (in reverse chronological order)
+    :return: List of fetched VoiceStateChangeLogs
+    """
+    # SQLAlchemy doesn't seem to like `select(A).select(B)`,
+    # so can't move this down to other remove_dupes / remove_undo checks
+    if remove_dupes or remove_undo:
+        stmt = db.select(
+            VoiceStateChangeLog, db.func.max(VoiceStateChangeLog.time)
+        ).order_by(VoiceStateChangeLog.time.desc())
+    else:
+        stmt = db.select(
+            VoiceStateChangeLog,
+        ).order_by(VoiceStateChangeLog.time.desc())
+
+    if guild_ids:
+        stmt = stmt.where(VoiceStateChangeLog.guild_id.in_(guild_ids))
+    if channel_ids:
+        stmt = stmt.where(VoiceStateChangeLog.channel_id.in_(channel_ids))
+    if user_ids:
+        stmt = stmt.where(VoiceStateChangeLog.user_id.in_(user_ids))
+    if changes:
+        # TODO
+        stmt = stmt.where(
+            db.func.concat(
+                VoiceStateChangeLog.change_name,
+                VoiceStateChangeLog.change_value,
+            ).in_(
+                # Assumes db stores bools as ints 0 and 1, like SQLite
+                [db.func.concat(c.value[0], int(c.value[1])) for c in changes]
+            )
+        )
+    if amount > -1:
+        stmt = stmt.limit(amount)
+
+    if remove_dupes and remove_undo:
+        # Gets only the most recent action
+        # per class, ignoring toggle on / off per user
+        stmt = stmt.group_by(
+            VoiceStateChangeLog.user_id, VoiceStateChangeLog.change_name
+        )
+    elif remove_dupes:
+        # Gets only the most recent action
+        # per class per toggle on / off per user
+        stmt = stmt.group_by(
+            VoiceStateChangeLog.user_id,
+            db.func.concat(
+                VoiceStateChangeLog.change_name,
+                VoiceStateChangeLog.change_value,
+            ),
+        )
+    elif remove_undo:
+        # Gets every action per class that is the most recent toggle?
+        raise ValueError
+
+    async with db.AsyncSession(db.ENGINE) as session:
+        print(stmt)
+        return list((await session.scalars(stmt)).all())
 
 
 # ToDo: Breakup _vc_log_embed
