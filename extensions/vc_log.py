@@ -28,27 +28,39 @@ def teardown(bot: cmds.Bot):
     bot.remove_cog(f"{VcLog.qualified_name}")
 
 
+ON = True
+OFF = False
+
+
 class VoiceStateChange(enum.Enum):
-    server_deafen = "deaf", True
-    server_undeafen = "deaf", False
-    server_mute = "mute", True
-    server_unmute = "mute", False
-    self_deafen = "self_deaf", True
-    self_undeafen = "self_deaf", False
-    self_mute = "self_mute", True
-    self_unmute = "self_mute", False
-    start_stream = "self_stream", True
-    end_stream = "self_stream", False
-    start_video = "self_video", True
-    end_video = "self_video", False
-    suppressed = "suppress", True
-    unsuppressed = "suppress", False
-    speak_request_start = "requested_to_speak_at", True
-    speak_request_end = "requested_to_speak_at", False
-    enter_afk = "afk", True
-    exit_afk = "afk", False
-    channel_join = "channel", True
-    channel_leave = "channel", False
+    server_deafen = "deaf", ON
+    server_undeafen = "deaf", OFF
+    server_mute = "mute", ON
+    server_unmute = "mute", OFF
+    self_deafen = "self_deaf", ON
+    self_undeafen = "self_deaf", OFF
+    self_mute = "self_mute", ON
+    self_unmute = "self_mute", OFF
+    start_stream = "self_stream", ON
+    end_stream = "self_stream", OFF
+    start_video = "self_video", ON
+    end_video = "self_video", OFF
+    suppressed = "suppress", ON
+    unsuppressed = "suppress", OFF
+    speak_request_start = "requested_to_speak_at", ON
+    speak_request_end = "requested_to_speak_at", OFF
+    enter_afk = "afk", ON
+    exit_afk = "afk", OFF
+    channel_join = "channel", ON
+    channel_leave = "channel", OFF
+
+    @property
+    def action(self) -> str:
+        return self.value[0]
+
+    @property
+    def toggle(self) -> bool:
+        return self.value[1]
 
     @property
     def opposite(self) -> "VoiceStateChange":
@@ -80,9 +92,9 @@ class VoiceStateChange(enum.Enum):
 
             if attr == "channel":
                 if old_value is not None:
-                    changes.append(cls((attr, False)))
+                    changes.append(cls((attr, OFF)))
                 if new_value is not None:
-                    changes.append(cls((attr, True)))
+                    changes.append(cls((attr, ON)))
             else:
                 changes.append(cls((attr, bool(new_value))))
 
@@ -102,8 +114,8 @@ class VoiceStateChangeLog(db.Storable):
     guild_id: Mapped[int]
     channel_id: Mapped[int]
     user_id: Mapped[int]
-    change_name: Mapped[str]
-    change_value: Mapped[bool]
+    change_action: Mapped[str]
+    change_toggle: Mapped[bool]
     time: Mapped[dt.datetime] = mapped_column(
         default=utils.utcnow, type_=db.TZDateTime
     )
@@ -111,7 +123,7 @@ class VoiceStateChangeLog(db.Storable):
 
     @property
     def change(self) -> VoiceStateChange:
-        return VoiceStateChange(self.change_name, self.change_value)
+        return VoiceStateChange(self.change_action, self.change_toggle)
 
 
 class VcLog(cmds.Cog):
@@ -378,8 +390,8 @@ async def _log_changes(
             guild_id=guild_id,
             channel_id=channel_id,
             user_id=member_id,
-            change_name=change.value[0],
-            change_value=change.value[1],
+            change_action=change.action,
+            change_toggle=change.toggle,
             time=time,
         ).save()
 
@@ -475,11 +487,11 @@ async def fetch_channel_records(
         # TODO
         stmt = stmt.where(
             db.func.concat(
-                VoiceStateChangeLog.change_name,
-                VoiceStateChangeLog.change_value,
+                VoiceStateChangeLog.change_action,
+                VoiceStateChangeLog.change_toggle,
             ).in_(
                 # Assumes db stores bools as ints 0 and 1, like SQLite
-                [db.func.concat(c.value[0], int(c.value[1])) for c in changes]
+                [db.func.concat(c.action, int(c.toggle)) for c in changes]
             )
         )
     if amount > -1:
@@ -489,7 +501,7 @@ async def fetch_channel_records(
         # Gets only the most recent action
         # per class, ignoring toggle on / off per user
         stmt = stmt.group_by(
-            VoiceStateChangeLog.user_id, VoiceStateChangeLog.change_name
+            VoiceStateChangeLog.user_id, VoiceStateChangeLog.change_action
         )
     elif remove_dupes:
         # Gets only the most recent action
@@ -497,8 +509,8 @@ async def fetch_channel_records(
         stmt = stmt.group_by(
             VoiceStateChangeLog.user_id,
             db.func.concat(
-                VoiceStateChangeLog.change_name,
-                VoiceStateChangeLog.change_value,
+                VoiceStateChangeLog.change_action,
+                VoiceStateChangeLog.change_toggle,
             ),
         )
     elif remove_undo:
@@ -529,9 +541,9 @@ def _vc_log_embed(
         time_str = utils.format_dt(event.time, time_format)
         line = f"- {mention} {time_str}\n"
         if len(existing + line) > 1023:
-            fields[event.change_name] = existing + "+"
+            fields[event.change_action] = existing + "+"
         else:
-            fields[event.change_name] = existing + line
+            fields[event.change_action] = existing + line
 
     embed = utils.make_embed(title=f"Voice Event History", ctx=ctx)
     for field, event_str in fields.items():
