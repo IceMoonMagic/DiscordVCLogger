@@ -36,15 +36,17 @@ class TimeCommands(cmds.Cog):
     ]
     time_cmds = discord.SlashCommandGroup("time", "foo")
 
-    def make_timestamp_embed (
+    def make_timestamp_embed(
         self,
         ctx: discord.ApplicationContext,
         datetime: dt.datetime,
     ) -> discord.Embed:
-        embed = utils.make_embed(f'Timestamps for `{int(datetime.timestamp())}`', ctx=ctx)
+        embed = utils.make_embed(
+            f"Timestamps for `{int(datetime.timestamp())}`", ctx=ctx
+        )
         for name, key in self.formats:
             string = utils.format_dt(datetime, key)
-            embed.add_field(name=name, value=f'{string}\n`{string}`')
+            embed.add_field(name=name, value=f"{string}\n`{string}`")
         return embed
 
     @time_cmds.command()
@@ -64,7 +66,7 @@ class TimeCommands(cmds.Cog):
             )
         )
 
-    @time_cmds.command(name='in')
+    @time_cmds.command(name="in")
     @utils.autogenerate_options
     async def _in(
         self,
@@ -83,7 +85,8 @@ class TimeCommands(cmds.Cog):
         await ctx.respond(
             embed=self.make_timestamp_embed(
                 ctx=ctx,
-                datetime=utils.utcnow() + dt.timedelta(
+                datetime=utils.utcnow()
+                + dt.timedelta(
                     # weeks=0,
                     days=days,
                     hours=hours,
@@ -128,4 +131,3 @@ class TimeCommands(cmds.Cog):
                 ),
             ),
         )
-

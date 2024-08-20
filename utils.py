@@ -93,9 +93,11 @@ class UnlockModal(discord.ui.Modal):
                 ephemeral=True,
                 embed=make_embed(
                     f"Unlocked {self.unlock_type.__name__}",
-                    color=interaction.guild.me.color
-                    if interaction.guild
-                    else None,
+                    color=(
+                        interaction.guild.me.color
+                        if interaction.guild
+                        else None
+                    ),
                 ),
             )
         except ValueError as e:
@@ -143,11 +145,10 @@ def autogenerate_options(fn):
 
 
 def get_qualified_name(
-    command: discord.SlashCommand | Callable,
-    include_slash: bool = True
+    command: discord.SlashCommand | Callable, include_slash: bool = True
 ) -> str:
-    if not hasattr(command, 'name') or not hasattr(command, 'parent'):
-        raise TypeError(f'{command} is not a valid command.')
+    if not hasattr(command, "name") or not hasattr(command, "parent"):
+        raise TypeError(f"{command} is not a valid command.")
 
     name = command.name
     command = command.parent

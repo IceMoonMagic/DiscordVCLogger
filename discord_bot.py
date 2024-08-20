@@ -19,7 +19,7 @@ def main():
 
     db.setup_logging(
         to_stdout=not args.quiet,
-        local_level=(logging.DEBUG if args.debug else logging.INFO)
+        local_level=(logging.DEBUG if args.debug else logging.INFO),
         # local_level=logging.DEBUG
     )
     logger = db.get_logger(__name__)
