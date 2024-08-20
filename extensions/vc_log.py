@@ -6,7 +6,8 @@ from collections.abc import Collection
 
 import discord
 import discord.ext.commands as cmds
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 import database as db
 import utils
@@ -126,6 +127,107 @@ class VoiceStateChangeLog(db.Storable):
         return VoiceStateChange(self.change_action, self.change_toggle)
 
 
+class VcLogAutoNotif(db.Storable):
+    ALL = "all"
+    TRIGGER_A = "trigger"
+    TRIGGER_T = -1
+    BOTH = 2
+
+    __tablename__ = "VcLogAutoNotif"
+    p_key: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    guild_id: Mapped[int]
+    channel_id: Mapped[int]
+    amount: Mapped[int]
+    remove_dupes: Mapped[bool]
+    remove_undo: Mapped[bool]
+    include_present: Mapped[bool]
+    include_absent: Mapped[bool]
+    time_format: Mapped[str]
+    vsc_action: Mapped[str]
+    vsc_toggle: Mapped[int]
+
+    async def activate(
+        self,
+        bot: discord.Bot,
+        triggering_channel: discord.VoiceChannel,
+        triggering_change: VoiceStateChange,
+    ):
+        send_channel = bot.get_channel(self.channel_id)
+        try:
+            await send_channel.trigger_typing()
+        except discord.Forbidden:
+            return
+        changes = self.get_changes(triggering_change)
+        events = await fetch_channel_records(
+            guild_ids=[self.guild_id],
+            channel_ids=[triggering_channel.id],
+            changes=changes,
+            remove_undo=self.remove_undo,
+            remove_dupes=self.remove_dupes,
+            amount=self.amount,
+        )
+        await send_channel.send(
+            embed=_vc_log_embed(
+                events, self.time_format, channel=triggering_channel
+            )
+        )
+
+    def get_changes(
+        self, trigger: VoiceStateChange = None
+    ) -> list[VoiceStateChange]:
+        match self.vsc_action:
+            case self.ALL:
+                match self.vsc_toggle:
+                    case self.BOTH:
+                        return self._get_all_changes(None)
+                    case self.TRIGGER_T:
+                        return self._get_all_changes(trigger.toggle)
+                    case _:
+                        return self._get_all_changes(self.vsc_toggle)
+            case self.TRIGGER_A:
+                vsc_action = trigger.action
+            case _:
+                vsc_action = self.vsc_action
+        match self.vsc_toggle:
+            case self.BOTH:
+                return [VoiceStateChange(vsc_action, t) for t in [ON, OFF]]
+            case self.TRIGGER_T:
+                return [VoiceStateChange(vsc_action, trigger.toggle)]
+            case _:
+                return [VoiceStateChange(vsc_action, self.vsc_toggle)]
+
+    @staticmethod
+    def _get_all_changes(toggle: bool | None) -> list[VoiceStateChange]:
+        changes: list[VoiceStateChange] = []
+        for action, toggle_ in VoiceStateChange.__members__.values():
+            if toggle is None or toggle == toggle_:
+                changes.append(VoiceStateChange(action, toggle_))
+        return changes
+
+    # def _get_bit(self, n) -> bool:
+    #     return self.bits & (1 << n)
+    #
+    # def _set_bit(self, n, to: bool):
+    #     if self._get_bit(n) != to:
+    #         self.bits ^= 1 << n
+
+
+class VcLogAutoTrigger(db.Storable):
+    __tablename__ = "VcLogAutoTrigger"
+    p_key: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    guild_id: Mapped[int]
+    voice_channel_id: Mapped[int]
+    on_change_action: Mapped[str]
+    on_change_toggle: Mapped[int]
+    on_channel_non_empty: Mapped[bool]
+    on_channel_empty: Mapped[bool]
+    trigger: Mapped[VcLogAutoNotif] = mapped_column(
+        ForeignKey(VcLogAutoNotif.p_key)
+    )
+
+
 class VcLog(cmds.Cog):
     """Cog for monitoring who joined and left a VC"""
 
@@ -163,7 +265,9 @@ class VcLog(cmds.Cog):
         :param old_state: The Voice State before the voice state update
         :param new_state: The Voice State after the voice state update
         """
-        await _log_changes(member.guild.id, member.id, old_state, new_state)
+        await _log_changes(
+            self.bot, member.guild.id, member.id, old_state, new_state
+        )
 
     log_command_group = discord.SlashCommandGroup("vclog", "foo")
 
@@ -214,7 +318,7 @@ class VcLog(cmds.Cog):
             changes=[VoiceStateChange.channel_join],
             amount=amount,
         )
-        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx, vc))
 
     @log_command_group.command()
     @utils.autogenerate_options
@@ -240,11 +344,11 @@ class VcLog(cmds.Cog):
             await ctx.respond(embed=vc)
         events = await fetch_channel_records(
             channel_ids=[vc.id],
-            exclude_user_ids=list(vc.voice_states),
+            user_ids=([], list(vc.voice_states)),
             changes=[VoiceStateChange.channel_leave],
             amount=amount,
         )
-        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx, vc))
 
     @log_command_group.command()
     @utils.autogenerate_options
@@ -287,7 +391,7 @@ class VcLog(cmds.Cog):
             remove_undo=remove_undo,
             amount=amount,
         )
-        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx, vc))
 
     @log_command_group.command()
     @utils.autogenerate_options
@@ -337,39 +441,106 @@ class VcLog(cmds.Cog):
         if not (vc := self._determine_voice_channel(ctx, channel)):
             await ctx.respond(embed=vc)
 
-        # ToDo: Find way to not have three *slightly* different calls
         if include_present and include_absent:
-            events = await fetch_channel_records(
-                channel_ids=[vc.id],
-                changes=[VoiceStateChange.channel_join],
-                remove_dupes=remove_dupes,
-                remove_undo=remove_undo,
-                amount=amount,
-            )
+            users = None
         elif include_present:
-            events = await fetch_channel_records(
-                channel_ids=[vc.id],
-                user_ids=list(vc.voice_states),
-                changes=[VoiceStateChange.channel_join],
-                remove_dupes=remove_dupes,
-                remove_undo=remove_undo,
-                amount=amount,
-            )
+            users = vc.voice_states
         elif include_absent:
-            events = await fetch_channel_records(
-                channel_ids=[vc.id],
-                exclude_user_ids=list(vc.voice_states),
-                changes=[VoiceStateChange.channel_join],
-                remove_dupes=remove_dupes,
-                remove_undo=remove_undo,
-                amount=amount,
-            )
+            users = [[], vc.voice_states]
         else:
-            events = []
-        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx))
+            await ctx.respond(embed=_vc_log_embed([], time_format, ctx, vc))
+            return
+
+        events = await fetch_channel_records(
+            channel_ids=[vc.id],
+            changes=[VoiceStateChange.channel_join],
+            user_ids=users,
+            remove_dupes=remove_dupes,
+            remove_undo=remove_undo,
+            amount=amount,
+        )
+
+        # # ToDo: Find way to not have three *slightly* different calls
+        # if include_present and include_absent:
+        #     events = await fetch_channel_records(
+        #         channel_ids=[vc.id],
+        #         changes=[VoiceStateChange.channel_join],
+        #         remove_dupes=remove_dupes,
+        #         remove_undo=remove_undo,
+        #         amount=amount,
+        #     )
+        # elif include_present:
+        #     events = await fetch_channel_records(
+        #         channel_ids=[vc.id],
+        #         user_ids=list(vc.voice_states),
+        #         changes=[VoiceStateChange.channel_join],
+        #         remove_dupes=remove_dupes,
+        #         remove_undo=remove_undo,
+        #         amount=amount,
+        #     )
+        # elif include_absent:
+        #     events = await fetch_channel_records(
+        #         channel_ids=[vc.id],
+        #         exclude_user_ids=list(vc.voice_states),
+        #         changes=[VoiceStateChange.channel_join],
+        #         remove_dupes=remove_dupes,
+        #         remove_undo=remove_undo,
+        #         amount=amount,
+        #     )
+        # else:
+        #     events = []
+        await ctx.respond(embed=_vc_log_embed(events, time_format, ctx, vc))
+
+
+async def _trigger_auto(
+    bot: discord.Bot,
+    channel: VOICE_STATE_CHANNELS,
+    change: VoiceStateChange,
+    is_empty: bool,
+):
+    """"""
+
+    """
+    SELECT N.*
+    FROM VcLogAutoNotif N
+    INNER JOIN VcLogAutoTrigger T ON N.p_key = T.TRIGGER
+    WHERE T.voice_channel_id = (?)
+    AND T.on_change_action = (?)
+    AND T.on_change_toggle = (?)
+    <AND T.on_channel_non_empty = 1>
+    <AND T.on_channel_empty = 1>
+    """
+    stmt = (
+        db.select(VcLogAutoNotif)
+        .join(
+            VcLogAutoTrigger, VcLogAutoTrigger.trigger == VcLogAutoNotif.p_key
+        )
+        .where(VcLogAutoTrigger.voice_channel_id == channel.id)
+        .where(
+            VcLogAutoTrigger.on_change_action.in_(
+                [change.action, VcLogAutoNotif.ALL]
+            )
+        )
+        .where(
+            VcLogAutoTrigger.on_change_toggle.in_(
+                (int(change.toggle), VcLogAutoNotif.BOTH)
+            )
+        )
+    )
+    if is_empty:
+        stmt = stmt.where(VcLogAutoTrigger.on_channel_empty)
+    else:
+        stmt = stmt.where(VcLogAutoTrigger.on_channel_non_empty)
+
+    async with db.AsyncSession(db.ENGINE) as session:
+        notifs = (await session.scalars(stmt)).all()
+
+    for notif in notifs:
+        await notif.activate(bot, channel, change)
 
 
 async def _log_changes(
+    bot: discord.Bot,
     guild_id: int,
     member_id: int,
     old_state: discord.VoiceState,
@@ -377,23 +548,25 @@ async def _log_changes(
 ):
     time = utils.utcnow()
     for change in VoiceStateChange.find_changes(old_state, new_state):
-        if change == VoiceStateChange.channel_leave:
-            if len(old_state.channel.voice_states) == 0:
-                await VoiceStateChangeLog.delete_all(
-                    VoiceStateChangeLog.channel_id == old_state.channel.id
-                )
-                continue
-            channel_id = old_state.channel.id
+        if change is VoiceStateChange.channel_leave:
+            is_empty = len(old_state.channel.voice_states) == 0
+            channel = old_state.channel
         else:
-            channel_id = new_state.channel.id
+            is_empty = False
+            channel = new_state.channel
         await VoiceStateChangeLog(
             guild_id=guild_id,
-            channel_id=channel_id,
+            channel_id=channel.id,
             user_id=member_id,
             change_action=change.action,
             change_toggle=change.toggle,
             time=time,
         ).save()
+        await _trigger_auto(bot, channel, change, is_empty)
+        if is_empty:
+            await VoiceStateChangeLog.delete_all(
+                VoiceStateChangeLog.channel_id == old_state.channel.id
+            )
 
 
 async def _log_reconciliation(bot: discord.Bot):
@@ -433,6 +606,7 @@ async def _log_reconciliation(bot: discord.Bot):
             for member_id, voice_state in voice_channel.voice_states.items():
                 presumed_state = discord.VoiceState(data=presumed_state_data)
                 await _log_changes(
+                    bot=bot,
                     guild_id=guild.id,
                     member_id=member_id,
                     old_state=presumed_state,
@@ -443,8 +617,8 @@ async def _log_reconciliation(bot: discord.Bot):
 async def fetch_channel_records(
     guild_ids: list[int] = None,
     channel_ids: list[int] = None,
-    user_ids: list[int] = None,
-    exclude_user_ids: list[int] = None,
+    user_ids: list[int] | tuple[list[int], list[int]] = None,
+    # exclude_user_ids: list[int] = None,
     changes: list[VoiceStateChange] = None,
     remove_dupes: bool = False,
     remove_undo: bool = False,
@@ -456,7 +630,7 @@ async def fetch_channel_records(
     :param guild_ids: Only fetch records from <guilds>
     :param channel_ids: Only fetch records from <channels>
     :param user_ids: Only fetch records from <users>
-    :param exclude_user_ids: Ignore records from <users>
+    # :param exclude_user_ids: Ignore records from <users>
     :param changes: Only fetch records of <VoiceStateChanges>
     :param remove_dupes:
     Only fetch the most recent of the event per type per toggle per member
@@ -480,11 +654,13 @@ async def fetch_channel_records(
     if channel_ids:
         stmt = stmt.where(VoiceStateChangeLog.channel_id.in_(channel_ids))
     if user_ids:
-        stmt = stmt.where(VoiceStateChangeLog.user_id.in_(user_ids))
-    if exclude_user_ids:
-        stmt = stmt.where(VoiceStateChangeLog.user_id.notin_(exclude_user_ids))
+        if isinstance(user_ids[0], int):
+            stmt = stmt.where(VoiceStateChangeLog.user_id.in_(user_ids))
+        else:
+            if len(user_ids[0]) != 0:
+                stmt = stmt.where(VoiceStateChangeLog.user_id.in_(user_ids[0]))
+            stmt = stmt.where(VoiceStateChangeLog.user_id.notin_(user_ids[1]))
     if changes:
-        # TODO
         stmt = stmt.where(
             db.func.concat(
                 VoiceStateChangeLog.change_action,
@@ -526,6 +702,9 @@ def _vc_log_embed(
     events: list[VoiceStateChangeLog],
     time_format: utils.TimestampStyle = "R",
     ctx: discord.ApplicationContext = None,
+    channel: (
+        VOICE_STATE_CHANNELS | discord.TextChannel | discord.Thread
+    ) = None,
 ) -> discord.Embed:
     """
     Creates an embed for the given logs
@@ -541,11 +720,13 @@ def _vc_log_embed(
         time_str = utils.format_dt(event.time, time_format)
         line = f"- {mention} {time_str}\n"
         if len(existing + line) > 1023:
-            fields[event.change_action] = existing + "+"
+            fields[event.change.name] = existing + "+"
         else:
-            fields[event.change_action] = existing + line
-
-    embed = utils.make_embed(title=f"Voice Event History", ctx=ctx)
+            fields[event.change.name] = existing + line
+    title = "Voice Event History"
+    if hasattr(channel, "name"):
+        title += f" in `{channel.name}`"
+    embed = utils.make_embed(title=title, ctx=ctx)
     for field, event_str in fields.items():
         # ToDo: Inline with opposite
         embed.add_field(
